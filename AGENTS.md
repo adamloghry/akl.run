@@ -122,12 +122,11 @@ adding a `connect-src`, deliberately.
 - If Cloudflare zone-level email obfuscation is ever enabled, its injected
   decode script is served from `/cdn-cgi/…` — same origin, so `'self'`
   permits it. A local serve can't exercise that; it is stated, not tested.
-- `style-src … https://fonts.googleapis.com` and `font-src …
-  https://fonts.gstatic.com` are **unused leftovers**: a predecessor site added them for
-  its blog, and akl.run keeps `_headers` unchanged from it. Nothing here
-  loads from either host. Tightening them is a separate, deliberate change
-  the owner can make later (then regenerate golden — `_headers` is in the
-  manifest).
+- Every source is `'self'`: the fonts are self-hosted under
+  `public/assets/fonts/`, so there is no Google Fonts host in `style-src` or
+  `font-src` (the handoff's demo pages load them from Google; the site does
+  not). Adding any third-party host is a deliberate change: regenerate
+  golden afterwards (`_headers` is in the manifest).
 
 ## Dev environment
 
