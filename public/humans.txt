@@ -1,0 +1,12 @@
+/* TEAM */
+Developer: Adam Loghry
+Site: https://akl.run
+Mastodon: https://hachyderm.io/@akl
+Signal: akl.07
+Bluesky: https://bsky.app/profile/akl.io
+Location: Seattle, USA
+/* SITE */
+Data: Seattle city-limits polygon simplified from seattleio/seattle-boundaries-data (CC0)
+Fonts: Newsreader — Production Type, SIL OFL 1.1 (https://fonts.google.com/specimen/Newsreader; 16pt optical-size instances of https://github.com/google/fonts/tree/8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5/ofl/newsreader)
+Fonts: JetBrains Mono — JetBrains, SIL OFL 1.1 (https://github.com/JetBrains/JetBrainsMono, release v2.304)
+Software: Emacs

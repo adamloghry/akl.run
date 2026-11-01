@@ -1,0 +1,438 @@
+{
+ "v": 3,
+ "attachments": {},
+ "boards": {
+  "Factory.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "is_interactive": true,
+   "title": "akl.run — factory mode = factory.akl.run start (desktop, night)",
+   "w": 1440,
+   "x": 1520,
+   "y": 0
+  },
+  "Main.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "is_interactive": true,
+   "title": "akl.run — hub (desktop, day)",
+   "w": 1440,
+   "x": 0,
+   "y": 0
+  },
+  "Opt-A-eza.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "Option A — eza -l@ --icons --git",
+   "w": 1440,
+   "x": 0,
+   "y": 2460,
+   "page": "explore"
+  },
+  "Opt-B-tree.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "Option B — tree",
+   "w": 1440,
+   "x": 1520,
+   "y": 2460,
+   "page": "explore"
+  },
+  "Opt-C-kubectl.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "Option C — kubectl get projects",
+   "w": 1440,
+   "x": 3040,
+   "y": 2460,
+   "page": "explore"
+  },
+  "Opt-D-fieldnotes.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "Option D — field notes (mo.town-style list)",
+   "w": 1440,
+   "x": 0,
+   "y": 3480,
+   "page": "explore"
+  },
+  "Opt-E-blueprints.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "Option E — blueprint book (cards)",
+   "w": 1440,
+   "x": 1520,
+   "y": 3480,
+   "page": "explore"
+  },
+  "Opt-F-departures.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "Option F — departure board",
+   "w": 1440,
+   "x": 3040,
+   "y": 3480,
+   "page": "explore"
+  },
+  "Opt-C1-wide.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "Option C1 — kubectl get -o wide (READY/RESTARTS, kube-ps1)",
+   "w": 1440,
+   "x": 0,
+   "y": 4500,
+   "page": "explore"
+  },
+  "Opt-C2-k9s.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "Option C2 — k9s TUI pane",
+   "w": 1440,
+   "x": 1520,
+   "y": 4500,
+   "page": "explore"
+  },
+  "Opt-C3-yaml.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "Option C3 — kubectl get -o yaml",
+   "w": 1440,
+   "x": 3040,
+   "y": 4500,
+   "page": "explore"
+  },
+  "Opt-D1-ledger.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "Option D1 — field notes, ledger (dividers + status column)",
+   "w": 1440,
+   "x": 0,
+   "y": 5520,
+   "page": "explore"
+  },
+  "Opt-D2-shelf.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "Option D2 — field notes, shelf grid (big icons)",
+   "w": 1440,
+   "x": 1520,
+   "y": 5520,
+   "page": "explore"
+  },
+  "Opt-D3-numbered.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "Option D3 — field notes, numbered editorial (no icons)",
+   "w": 1440,
+   "x": 3040,
+   "y": 5520,
+   "page": "explore"
+  },
+  "Opt-D1a-paper.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1a — paper (light panel, dark type)",
+   "w": 1440,
+   "x": 0,
+   "y": 6540,
+   "page": "explore"
+  },
+  "Opt-D1b-night.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1b — night (dark world, status dots)",
+   "w": 1440,
+   "x": 1520,
+   "y": 6540,
+   "page": "explore"
+  },
+  "Opt-D1c-twocol.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1c — two-column ledger (chips)",
+   "w": 1440,
+   "x": 3040,
+   "y": 6540,
+   "page": "explore"
+  },
+  "Opt-D1d-rail.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1d — left rail (docked column)",
+   "w": 1440,
+   "x": 0,
+   "y": 7560,
+   "page": "explore"
+  },
+  "Opt-D1e-dock.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1e — bottom dock (horizontal strip)",
+   "w": 1440,
+   "x": 1520,
+   "y": 7560,
+   "page": "explore"
+  },
+  "Opt-D1f-large.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1f — large print (big type, big icons)",
+   "w": 1440,
+   "x": 3040,
+   "y": 7560,
+   "page": "explore"
+  },
+  "Opt-D1g-mono.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1g — compact mono (no serif)",
+   "w": 1440,
+   "x": 0,
+   "y": 8580,
+   "page": "explore"
+  },
+  "Opt-D1h-index.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1h — index + year column",
+   "w": 1440,
+   "x": 1520,
+   "y": 8580,
+   "page": "explore"
+  },
+  "Opt-D1i-tabs.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1i — filter tabs + count",
+   "w": 1440,
+   "x": 3040,
+   "y": 8580,
+   "page": "explore"
+  },
+  "Opt-D1j-preview.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1j — list + preview pane",
+   "w": 1440,
+   "x": 0,
+   "y": 9600,
+   "page": "explore"
+  },
+  "Opt-D1k-tinted.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1k — colour-coded per project",
+   "w": 1440,
+   "x": 1520,
+   "y": 9600,
+   "page": "explore"
+  },
+  "Opt-D1l-journal.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1l — with last-event journal line",
+   "w": 1440,
+   "x": 3040,
+   "y": 9600,
+   "page": "explore"
+  },
+  "Opt-D1h1-clean.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1h-1 — indexed list, 8 entries",
+   "w": 1440,
+   "x": 0,
+   "y": 10620,
+   "page": "explore"
+  },
+  "Opt-D1h2-twocol.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1h-2 — indexed, two columns",
+   "w": 1440,
+   "x": 1520,
+   "y": 10620,
+   "page": "explore"
+  },
+  "Opt-D1h3-numerals.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1h-3 — indexed, serif numerals",
+   "w": 1440,
+   "x": 3040,
+   "y": 10620,
+   "page": "explore"
+  },
+  "Opt-D1h4-grouped.dc.html": {
+   "expand": "fill",
+   "h": 900,
+   "title": "D1h-4 — indexed, grouped by kind",
+   "w": 1440,
+   "x": 4560,
+   "y": 10620,
+   "page": "explore"
+  },
+  "Phone.dc.html": {
+   "h": 844,
+   "is_interactive": true,
+   "title": "akl.run — hub (phone)",
+   "w": 390,
+   "x": 3040,
+   "y": 0
+  },
+  "World.dc.html": {
+   "h": 900,
+   "is_interactive": true,
+   "title": "World — shared factory engine (bare, day/night cycle + rain)",
+   "w": 1440,
+   "x": 0,
+   "y": 1140
+  }
+ },
+ "createdOnFiles": {
+  "at": "2026-10-24T21:40:00Z",
+  "v": 1
+ },
+ "designSystems": [],
+ "launch": {
+  "view": "canvas",
+  "page": "final"
+ },
+ "notes": {
+  "n1": {
+   "fill": "orange",
+   "text": "Hub mode (final = D1h-1)\n\nOne centred window: `akl.run` + a house-icon link to akl.dev (icon only), then seven whole-row project links (pixel icon · name · one serif line). Row 1 `factory` minimises the window into factory mode (so does the lat/long readout and `m`); only the word Factorio in its line links out.\n\nDescriptions are one line on desktop and wrap to two below 760px. No index, no status, no years. Fonts to be self-hosted (JetBrains Mono + Newsreader).",
+   "w": 420,
+   "x": 3520,
+   "y": 0
+  },
+  "n2": {
+   "fill": "teal",
+   "text": "Factory mode\n\nWindow fades out, `journalctl -u factory -f` comes back bottom-centre with a ring of 6 lines, a small production readout top-right, and `fg` top-left to return.\n\nEvery visible event writes a line: biter raids, turret fire, wall repair, blueprint construction, train arrivals + signals, rocket countdown/launch/cargo pod, radar charting, research, belt jams, brownouts, spidertron patrols, car trips, storms.\n\nStart state by host: akl.run → hub; factory.akl.run (or #factory) → this state immediately, no hub flash (a tiny sync boot.js sets html.factory before first paint). Same build, two custom domains; % fg / m / readout still bring the hub back.",
+   "w": 420,
+   "x": 3520,
+   "y": 360
+  },
+  "n3": {
+   "fill": "gray",
+   "text": "Engine (World.dc.html)\n\nOne shared child component painting a seeded pixel-art world on a canvas. Tweaks: mode, time (day/dusk/night/cycle), rain, zoom, seed, still (one pre-simulated frame — used by the option boards so they don't each run a live sim).\n\nClick the map to send the camera somewhere.",
+   "w": 420,
+   "x": 3520,
+   "y": 720
+  },
+  "t1": {
+   "kind": "title1",
+   "maxW": 3430,
+   "text": "akl.run — final: hub (Main), factory mode (Factory), phone, shared engine (World)",
+   "w": 240,
+   "x": 0,
+   "y": -300
+  },
+  "t2": {
+   "kind": "title1",
+   "maxW": 4400,
+   "text": "Project list options — CLI, enhanced",
+   "w": 240,
+   "x": 0,
+   "y": 2160,
+   "page": "explore"
+  },
+  "t3": {
+   "kind": "title1",
+   "maxW": 4400,
+   "text": "Project list options — portfolio looks",
+   "w": 240,
+   "x": 0,
+   "y": 3180,
+   "page": "explore"
+  },
+  "t4": {
+   "kind": "title1",
+   "maxW": 4400,
+   "text": "Option C variants — denser panel, home link",
+   "w": 240,
+   "x": 0,
+   "y": 4200,
+   "page": "explore"
+  },
+  "t5": {
+   "kind": "title1",
+   "maxW": 4400,
+   "text": "Option D variants — denser panel, home link",
+   "w": 240,
+   "x": 0,
+   "y": 5220,
+   "page": "explore"
+  },
+  "t6": {
+   "kind": "title1",
+   "maxW": 4400,
+   "text": "D1 remixes — twelve, one axis each",
+   "w": 240,
+   "x": 0,
+   "y": 6240,
+   "page": "explore"
+  },
+  "t7": {
+   "kind": "title1",
+   "maxW": 5900,
+   "text": "D1h variants — no status or years, akl.io link, more entries",
+   "w": 240,
+   "x": 0,
+   "y": 10320,
+   "page": "explore"
+  },
+  "n4": {
+   "fill": "gray",
+   "text": "Handoff map\n\nMain.dc.html = the page, hub state. Factory.dc.html = same page, factory state (night). Phone.dc.html = 390px layout. World.dc.html = the engine (child component mounted by all three; `still` prop renders one pre-simulated frame = the reduced-motion path).\n\nEverything else lives on the Explorations page.",
+   "w": 420,
+   "x": 3520,
+   "y": 1140
+  }
+ },
+ "order": [
+  "Opt-D1h4-grouped.dc.html",
+  "Opt-D1h3-numerals.dc.html",
+  "Opt-D1h2-twocol.dc.html",
+  "Opt-D1h1-clean.dc.html",
+  "Opt-D1l-journal.dc.html",
+  "Opt-D1k-tinted.dc.html",
+  "Opt-D1j-preview.dc.html",
+  "Opt-D1i-tabs.dc.html",
+  "Opt-D1h-index.dc.html",
+  "Opt-D1g-mono.dc.html",
+  "Opt-D1f-large.dc.html",
+  "Opt-D1e-dock.dc.html",
+  "Opt-D1d-rail.dc.html",
+  "Opt-D1c-twocol.dc.html",
+  "Opt-D1b-night.dc.html",
+  "Opt-D1a-paper.dc.html",
+  "Opt-D3-numbered.dc.html",
+  "Opt-D2-shelf.dc.html",
+  "Opt-D1-ledger.dc.html",
+  "Opt-C3-yaml.dc.html",
+  "Opt-C2-k9s.dc.html",
+  "Opt-C1-wide.dc.html",
+  "Opt-F-departures.dc.html",
+  "Opt-E-blueprints.dc.html",
+  "Opt-D-fieldnotes.dc.html",
+  "Opt-C-kubectl.dc.html",
+  "Opt-B-tree.dc.html",
+  "Opt-A-eza.dc.html",
+  "World.dc.html",
+  "Phone.dc.html",
+  "Factory.dc.html",
+  "Main.dc.html"
+ ],
+ "pages": [
+  {
+   "id": "final",
+   "name": "Final — handoff"
+  },
+  {
+   "id": "explore",
+   "name": "Explorations"
+  }
+ ],
+ "title": "akl.run — factory hub"
+}

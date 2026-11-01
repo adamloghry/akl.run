@@ -1,0 +1,21 @@
+# akl.run
+
+Projects by Adam Loghry, running on top of a small factory: a busy pixel-art factory in a web page, inspired by Factorio, rendered live on a canvas. The page is a window listing the projects; minimising it shows the factory.
+
+## Projects
+
+- [factory](https://akl.run/#factory): A busy factory in a web page, inspired by Factorio (https://factorio.com/).
+- [16384.dev](https://16384.dev/): Source code behind various projects, including this website and others.
+- [rfc.akl.run](https://rfc.akl.run/): RFCs are cool, more engineers should read them. This is ~all of them, with ISO Plain Language variants.
+- [enchilada.dev](https://enchilada.dev/): I have been trying to make an end-to-end agentic software factory, with varying degrees of success.
+
+## The factory
+
+- Press `m` to minimise or restore the window; press `r` to reroll the world.
+- Click the map to send the camera there and look around.
+- `?seed=0x…` permalinks reproduce a world (for example `https://akl.run/?seed=0xa85b492a`).
+- `https://factory.akl.run/` opens straight into factory mode.
+
+## Person
+
+- [Adam Loghry](https://akl.dev/)

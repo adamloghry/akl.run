@@ -1,0 +1,14 @@
+tmp/
+node_modules/
+dist/
+.astro/
+coverage/
+.direnv/
+.devenv/
+.devenv.flake.nix
+.pre-commit-config.yaml
+result
+tests/e2e/node_modules/
+.DS_Store
+.claude/
+.superpowers/

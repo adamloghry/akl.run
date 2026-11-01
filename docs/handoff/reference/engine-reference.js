@@ -1,0 +1,502 @@
+// Reference implementation of the akl.run factory mock (Claude Design canvas, World.dc.html).
+// See 2026-10-25-akl-run-design.md §6. This is the behaviour reference for the event state
+// machines, camera, lights and weather — NOT code to drop into mapgen.js: it draws a fixed,
+// hand-placed 236×136-tile world on one offscreen canvas, where the real engine is infinite and
+// chunk-hashed. `DCLogic` is the design editor's base class; `this.props` carried mode/time/rain/
+// zoom/seed/still and the onEvent/onStats/onGeo callbacks. Everything else is plain canvas 2D.
+//
+class Component extends DCLogic {
+  renderVals() { return {}; }
+  componentDidMount() { this.boot(); }
+  componentWillUnmount() { this.dead = true; if (this.raf) cancelAnimationFrame(this.raf); if (this.ro) this.ro.disconnect(); }
+  prop(n, d) { const v = this.props[n]; return (v === undefined || v === null || v === '') ? d : v; }
+
+  boot() {
+    const self = this;
+    let cv = null;
+    for (const c of document.querySelectorAll('canvas[data-fx-world]')) { if (!c.__fx) { cv = c; break; } }
+    if (!cv) return;
+    cv.__fx = true;
+    const ctx = cv.getContext('2d');
+
+    // ---------- constants / hashing ----------
+    const T = 6, WT = 236, HT = 136, WPX = WT * T, HPX = HT * T;
+    const seed = (this.prop('seed', 24231) | 0) || 24231;
+    function hash(x, y, s) { let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(s | 0, 1274126177)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
+    function noise(x, y, s) { const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy); const a = hash(x0, y0, s), b = hash(x0 + 1, y0, s), c = hash(x0, y0 + 1, s), d = hash(x0 + 1, y0 + 1, s); return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v; }
+    function fbm(x, y, s) { return noise(x, y, s) * .5 + noise(x * 2.1, y * 2.1, s + 7) * .3 + noise(x * 4.3, y * 4.3, s + 13) * .2; }
+    const rnd = Math.random, clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+    const ITEM = { iron: '#b9c3cc', copper: '#e09457', circuit: '#3fa34d', gear: '#8d949a', ore: '#6f7f91', coal: '#2c2c2c', red: '#c0392b', plastic: '#e8e8e8' };
+    const MIX = ['#b9c3cc', '#e09457', '#3fa34d', '#8d949a', '#c0392b'];
+
+    // ---------- static world canvas ----------
+    const S = document.createElement('canvas'); S.width = WPX; S.height = HPX;
+    const g = S.getContext('2d');
+    const R = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+    const TR = (tx, ty, w, h, c) => R(tx * T, ty * T, w * T, h * T, c);
+
+    // terrain: Puget Sound west (with a bay bulge), a lake east, a small lake north
+    const coastAt = y => 24 + fbm(y * .045, 3.3, seed + 1) * 22 + Math.max(0, 10 - Math.abs(y - 100) * .5);
+    const lake = (x, y) => { const dx = (x - 150) / 24, dy = (y - 16) / 9; return dx * dx + dy * dy + (fbm(x * .11, y * .11, seed + 2) - .5) * .9 < 1; };
+    const coastEast = y => 216 + fbm(y * .05, 7.7, seed + 11) * 16;
+    const isWater = (x, y) => x < 0 || y < 0 || x >= WT || y >= HT || x < coastAt(y) || x > coastEast(y) || lake(x, y);
+    const reserved = [];
+    const reserve = (x, y, w, h) => reserved.push([x, y, w, h]);
+    const inRes = (x, y) => { for (const r of reserved) if (x >= r[0] - 1 && x < r[0] + r[2] + 1 && y >= r[1] - 1 && y < r[1] + r[3] + 1) return true; return false; };
+    const ores = [{ x: 60, y: 42, r: 10, k: 'iron' }, { x: 48, y: 84, r: 6, k: 'coal' }, { x: 60, y: 120, r: 8, k: 'copper' }, { x: 150, y: 44, r: 5, k: 'stone' }];
+    const oreAt = (x, y) => { for (const o of ores) { const d = Math.hypot(x - o.x, y - o.y); if (d < o.r * (.75 + .5 * noise(x * .3, y * .3, seed + 9))) return o; } return null; };
+    const Z = [[50, 36, 48, 28], [40, 66, 22, 18], [40, 78, 20, 8], [112, 32, 36, 24], [112, 56, 30, 10], [148, 52, 34, 30], [118, 76, 16, 16], [108, 26, 84, 8], [108, 96, 84, 8], [186, 26, 8, 78], [106, 26, 6, 78], [138, 56, 8, 8], [110, 82, 12, 4], [100, 0, 10, 136], [70, 106, 50, 14], [52, 116, 50, 6], [166, 106, 20, 20], [190, 100, 18, 36], [60, 62, 92, 6], [62, 70, 36, 12], [72, 86, 22, 10]];
+    Z.forEach(z => reserve(...z));
+    const waterTiles = [], shoreWater = [], nearShoreWater = [];
+    const GR = ['#4b5a2a', '#50602d', '#465628', '#536531'];
+    const WA = ['#143440', '#163a46', '#12303a'];
+    for (let y = 0; y < HT; y++) for (let x = 0; x < WT; x++) {
+      const h = hash(x, y, seed + 3);
+      if (isWater(x, y)) { TR(x, y, 1, 1, WA[(h * 3) | 0]); waterTiles.push(x, y); let landN = false, near = false; for (let dy = -1; dy <= 1 && !landN; dy++) for (let dx = -1; dx <= 1; dx++) if (!isWater(x + dx, y + dy)) { landN = true; break; } if (landN) shoreWater.push(x, y); else { for (let dy = -6; dy <= 6 && !near; dy += 2) for (let dx = -6; dx <= 6; dx += 2) if (!isWater(x + dx, y + dy)) { near = true; break; } if (near) nearShoreWater.push(x, y); } continue; }
+      let shore = false; for (let dy = -2; dy <= 2 && !shore; dy++) for (let dx = -2; dx <= 2; dx++) if (isWater(x + dx, y + dy)) { shore = true; break; }
+      const n = fbm(x * .07, y * .07, seed + 4);
+      const creep = y > 94 && (x - 189 + (y - 118) * .15) + (fbm(x * .1, y * .1, seed + 8) - .5) * 18 > 0 && x < 212 + (fbm(x * .1, y * .13, seed + 12) - .5) * 10;
+      if (shore) TR(x, y, 1, 1, h < .5 ? '#8a7a4e' : '#7d6d45');
+      else if (creep) { TR(x, y, 1, 1, h < .5 ? '#5e3a36' : '#6b433d'); if (h > .8) R(x * T + 2, y * T + 2, 2, 2, '#7a4a44'); }
+      else if (n > .64) { TR(x, y, 1, 1, h < .5 ? '#6b5838' : '#75613d'); if (h > .85) R(x * T + 1, y * T + 3, 2, 1, '#5a4a30'); }
+      else { const sh = fbm(x * .035, y * .035, seed + 31); TR(x, y, 1, 1, GR[clamp(((sh - .3) * 7) | 0, 0, 3)]); if (h > .86) R(x * T + ((h * 50) | 0) % 5, y * T + ((h * 70) | 0) % 5, 1, 1, '#637a36'); }
+      const o = oreAt(x, y);
+      if (o) { const c = { iron: ['#6f7f91', '#b3c0cc'], coal: ['#2a2a2a', '#4a4a4a'], copper: ['#a9633a', '#e09457'], stone: ['#8a8170', '#b5ac98'] }[o.k]; TR(x, y, 1, 1, c[0]); const k = hash(x, y, seed + 5); R(x * T + ((k * 4) | 0), y * T + (((k * 7) | 0) % 4), 2, 2, c[1]); if (k > .6) R(x * T + 4, y * T + 3, 1, 1, c[1]); }
+      else if (!shore && !inRes(x, y)) {
+        const tn = fbm(x * .13 + 9, y * .13, seed + 6);
+        if (tn > .55 && h > .25) {
+          if (creep) { R(x * T + 2, y * T + 1, 2, 5, '#4a3a30'); R(x * T + 1, y * T + 2, 1, 1, '#4a3a30'); R(x * T + 4, y * T + 1, 1, 1, '#4a3a30'); }
+          else { const dk = tn > .7; R(x * T, y * T, 6, 5, dk ? '#223a1c' : '#2f4a26'); R(x * T + 1, y * T, 3, 3, dk ? '#2f5228' : '#3f6232'); R(x * T + 2, y * T + 5, 2, 1, '#1d2d16'); R(x * T + 5, y * T + 4, 1, 1, '#1d2d16'); }
+        } else if (tn < .3 && h > .93) { R(x * T + 1, y * T + 2, 4, 3, '#6d6a62'); R(x * T + 1, y * T + 2, 2, 1, '#8c8a82'); }
+      }
+    }
+
+    // ---------- structures ----------
+    const belts = [], paths = [], ins = [], furn = [], asm = [], drills = [], poles = [], lamps = [], chim = [], engines = [], solars = [], accs = [], labs = [], turrets = [], walls = [], chests = [], pumpjacks = [], chem = [], boilers = [];
+    const DIR = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+    function beltPath(pts, colors, name) {
+      const tiles = [];
+      for (let i = 0; i < pts.length - 1; i++) {
+        let [x, y] = pts[i]; const [x1, y1] = pts[i + 1]; const d = x1 > x ? 0 : x1 < x ? 2 : y1 > y ? 1 : 3;
+        while (x !== x1 || y !== y1) { tiles.push({ x, y, d }); x += DIR[d][0]; y += DIR[d][1]; }
+        if (i === pts.length - 2) tiles.push({ x, y, d });
+      }
+      for (const t of tiles) { belts.push(t); TR(t.x, t.y, 1, 1, '#2e2f31'); R(t.x * T + (t.d % 2 ? 1 : 0), t.y * T + (t.d % 2 ? 0 : 1), t.d % 2 ? 4 : 6, t.d % 2 ? 4 : 4, '#3a3b3e'); }
+      const cols = Array.isArray(colors) ? colors : [colors];
+      const p = { tiles, L: tiles.length * T, items: [], cols, name, jam: 0, speed: 9 + rnd() * 2 };
+      for (let s = rnd() * 4; s < p.L; s += 4 + rnd() * 5) p.items.push({ s, c: cols[(rnd() * cols.length) | 0] });
+      paths.push(p); return p;
+    }
+    const inserter = (x, y, d, fast) => { ins.push({ x, y, d, ph: rnd() * 6.3, fast, c: null, st: null }); TR(x, y, 1, 1, '#34363a'); R(x * T + 2, y * T + 2, 2, 2, '#1f2022'); };
+    const furnace = (x, y) => { furn.push({ x, y, ph: rnd() * 6.3 }); TR(x, y, 2, 2, '#6b625a'); R(x * T + 1, y * T + 1, 10, 10, '#7a7066'); R(x * T + 3, y * T + 6, 6, 4, '#2a2420'); R(x * T + 2, y * T + 1, 8, 2, '#5c544c'); };
+    const assembler = (x, y) => { asm.push({ x, y, ph: rnd() * 6.3, next: 2 + rnd() * 4, blink: 0 }); TR(x, y, 3, 3, '#3f4b5c'); R(x * T + 1, y * T + 1, 16, 16, '#4f5d70'); R(x * T + 1, y * T + 1, 16, 2, '#d9a23a'); R(x * T + 6, y * T + 6, 6, 6, '#2b333d'); };
+    const drill = (x, y) => { drills.push({ x, y, ph: rnd() * 6.3 }); TR(x, y, 3, 3, '#4e5358'); R(x * T + 1, y * T + 1, 16, 16, '#5a6068'); R(x * T + 5, y * T + 5, 8, 8, '#2f3337'); R(x * T + 2, y * T + 15, 14, 2, '#d7b64b'); };
+    const pole = (x, y, big) => { poles.push({ x, y, big }); if (big) { R(x * T + 1, y * T + 1, 4, 4, '#4a4d52'); R(x * T + 2, y * T, 2, 6, '#6b6f75'); } else { R(x * T + 2, y * T + 1, 2, 5, '#6e5a3a'); R(x * T + 1, y * T + 1, 4, 1, '#8c7a52'); } };
+    const lamp = (x, y) => { lamps.push({ x, y, k: lamps.length }); R(x * T + 2, y * T + 2, 2, 4, '#8a8f94'); R(x * T + 1, y * T + 1, 4, 2, '#c9ced2'); };
+    const chest = (x, y, c) => { chests.push({ x, y }); TR(x, y, 1, 1, c); R(x * T + 1, y * T + 1, 4, 4, c === '#c9a227' ? '#e3bd3a' : '#8c9398'); R(x * T + 1, y * T + 3, 4, 1, '#2a2a2a'); };
+    const concrete = (x, y, w, h) => { TR(x, y, w, h, '#5f6468'); for (let i = 0; i <= w; i += 2) R((x + i) * T, y * T, 1, h * T, '#575b5f'); for (let j = 0; j <= h; j += 2) R(x * T, (y + j) * T, w * T, 1, '#575b5f'); };
+    const wall = (x, y) => { walls.push({ x, y, hp: 1, dmg: 0 }); TR(x, y, 1, 1, '#8e969c'); R(x * T, y * T + 3, 6, 1, '#6b7378'); R(x * T + 3, y * T, 1, 3, '#6b7378'); R(x * T, y * T, 6, 1, '#b4bcc1'); };
+    const turret = (x, y) => { turrets.push({ x, y, ang: rnd() * 6.3, cd: 0, flash: 0, tgt: null, id: turrets.length + 1, recoil: 0 }); TR(x, y, 2, 2, '#5b6064'); R(x * T + 2, y * T + 2, 8, 8, '#6a6f73'); };
+    const pipeH = (x, y, len) => { R(x * T, y * T + 2, len * T, 2, '#8a8f95'); R(x * T, y * T + 2, len * T, 1, '#aab0b6'); };
+    const pipeV = (x, y, len) => { R(x * T + 2, y * T, 2, len * T, '#8a8f95'); R(x * T + 2, y * T, 1, len * T, '#aab0b6'); };
+
+    // --- Mine M1 (iron) + smelter + assembly
+    for (let i = 0; i < 4; i++) { drill(52 + i * 4, 38); drill(52 + i * 4, 44); }
+    beltPath([[50, 42], [93, 42]], [ITEM.ore, ITEM.ore, ITEM.coal], 'B-1');
+    for (let i = 0; i < 7; i++) { furnace(72 + i * 3, 44); inserter(72 + i * 3, 43, 1); inserter(72 + i * 3, 46, 1); furnace(72 + i * 3, 39); inserter(72 + i * 3, 41, 3); inserter(72 + i * 3, 38, 3); }
+    beltPath([[72, 37], [98, 37], [98, 58], [72, 58]], [ITEM.iron, ITEM.iron, ITEM.copper], 'B-2');
+    beltPath([[72, 47], [97, 47]], ITEM.iron, 'B-3');
+    for (let i = 0; i < 5; i++) { assembler(74 + i * 4, 54); inserter(75 + i * 4, 57, 3); inserter(75 + i * 4, 53, 3); }
+    beltPath([[74, 52], [101, 52]], ITEM.circuit, 'B-4');
+    inserter(102, 52, 0, true); inserter(102, 51, 0, true); inserter(102, 53, 0, true);
+    for (let x = 52; x <= 96; x += 6) pole(x, 48, false);
+    lamp(70, 36); lamp(94, 36); lamp(70, 50); lamp(94, 50); lamp(72, 60); lamp(96, 60);
+
+    // --- Power P1: offshore pump, boilers, engines, coal mine
+    const cx0 = Math.ceil(coastAt(70)); pipeH(cx0, 70, 40 - cx0); R(cx0 * T, 69 * T, 12, 12, '#4d7a9a'); R(cx0 * T + 2, 69 * T + 2, 8, 8, '#2d5a7a');
+    for (let i = 0; i < 4; i++) { boilers.push({ x: 40 + i * 4, y: 71 }); TR(40 + i * 4, 71, 3, 2, '#5b5248'); R((40 + i * 4) * T + 2, 71 * T + 2, 14, 8, '#6a6057'); R((40 + i * 4) * T + 6, 71 * T + 6, 6, 4, '#2a2420'); chim.push({ x: (41 + i * 4) * T + 3, y: 71 * T, rate: 1 }); inserter(41 + i * 4, 73, 3); }
+    beltPath([[40, 79], [58, 79], [58, 74], [39, 74]], ITEM.coal, 'B-5');
+    for (let i = 0; i < 3; i++) { engines.push({ x: 40 + i * 6, y: 67, ph: rnd() * 6, puff: rnd() }); TR(40 + i * 6, 67, 5, 3, '#6d7278'); R((40 + i * 6) * T + 2, 67 * T + 4, 26, 10, '#7c8187'); R((40 + i * 6) * T + 4, 67 * T + 6, 22, 6, '#5a5f65'); }
+    pipeH(40, 70, 18);
+    drill(42, 80); drill(48, 80); drill(54, 80);
+    for (let i = 0; i < 3; i++) pole(45 + i * 6, 66, false);
+    lamp(38, 66); lamp(60, 66); lamp(38, 84); lamp(60, 84);
+    const bigs = [[62, 64], [76, 64], [90, 64], [104, 66], [118, 66], [132, 66], [146, 66], [160, 66], [174, 66], [188, 66]];
+    bigs.forEach(p => pole(p[0], p[1], true));
+
+    // --- Rail: mainline x=104, loop 110..190 × 30..100
+    const rails = [];
+    function railLine(pts, closed) {
+      const segs = [], cum = [0]; let L = 0;
+      for (let i = 0; i < pts.length - (closed ? 0 : 1); i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; const len = Math.hypot(b[0] - a[0], b[1] - a[1]); segs.push({ a, b, len }); L += len; cum.push(L); }
+      const ln = { pts, closed, segs, cum, L };
+      for (const s of segs) { const dx = (s.b[0] - s.a[0]) / s.len, dy = (s.b[1] - s.a[1]) / s.len, nx = -dy, ny = dx; R(Math.min(s.a[0], s.b[0]) - (dx ? 0 : 4), Math.min(s.a[1], s.b[1]) - (dy ? 0 : 4), dx ? s.len : 8, dy ? s.len : 8, '#6a625a'); for (let t = 0; t < s.len; t += 3.5) { const x = s.a[0] + dx * t, y = s.a[1] + dy * t; if (dx) R(x, y - 3, 1.5, 6, '#4e3d2a'); else R(x - 3, y, 6, 1.5, '#4e3d2a'); } g.strokeStyle = '#b4b8bc'; g.lineWidth = 1; for (const o of [-1.5, 1.5]) { g.beginPath(); g.moveTo(s.a[0] + nx * o, s.a[1] + ny * o); g.lineTo(s.b[0] + nx * o, s.b[1] + ny * o); g.stroke(); } }
+      rails.push(ln); return ln;
+    }
+    const P = (x, y) => [x * T + 3, y * T + 3];
+    const main = railLine([P(104, -6), P(104, 142)], false);
+    const loop = railLine([P(110, 30), P(190, 30), P(190, 100), P(110, 100)], true);
+    function posAt(ln, s) { if (ln.closed) s = ((s % ln.L) + ln.L) % ln.L; else s = clamp(s, 0, ln.L); let i = 0; while (i < ln.segs.length - 1 && s > ln.cum[i + 1]) i++; const sg = ln.segs[i], u = (s - ln.cum[i]) / sg.len; return { x: sg.a[0] + (sg.b[0] - sg.a[0]) * u, y: sg.a[1] + (sg.b[1] - sg.a[1]) * u, ang: Math.atan2(sg.b[1] - sg.a[1], sg.b[0] - sg.a[0]) }; }
+    const stations = [], signals = [];
+    function station(ln, s, name, side, orient) { const p = posAt(ln, s); const st = { ln, s, name, x: p.x, y: p.y, busy: false }; stations.push(st); const tx = Math.round(p.x / T), ty = Math.round(p.y / T);
+      if (orient === 'v') { concrete(tx + side * 2 - (side < 0 ? 1 : 0), ty - 4, 2, 9); for (let k = -3; k <= 3; k += 2) { inserter(tx + side * 2 - (side < 0 ? 1 : 0), ty + k, side > 0 ? 2 : 0, true); chest(tx + side * 3 - (side < 0 ? 1 : 0), ty + k, '#7f8a92'); } lamp(tx + side * 2, ty - 5); }
+      else { concrete(tx - 4, ty + side * 2 - (side < 0 ? 1 : 0), 9, 2); for (let k = -3; k <= 3; k += 2) { inserter(tx + k, ty + side * 2 - (side < 0 ? 1 : 0), side > 0 ? 3 : 1, true); chest(tx + k, ty + side * 3 - (side < 0 ? 1 : 0), '#7f8a92'); } lamp(tx - 5, ty + side * 2); } }
+    station(main, 56 * T, 'ST-1 circuits', -1, 'v');
+    station(main, 116 * T, 'ST-5 copper', -1, 'v');
+    station(loop, 44 * T, 'ST-2 ore unload', 1, 'h');
+    station(loop, 80 * T + 34 * T, 'ST-3 hub', -1, 'v');
+    station(loop, 80 * T + 70 * T + 40 * T, 'ST-4 silo', -1, 'h');
+    for (const ln of rails) for (let s = 30; s < ln.L; s += 150) signals.push({ ln, s, red: false });
+    for (const st of stations) signals.push({ ln: st.ln, s: st.s - 70, red: false });
+    for (const sg of signals) { const p = posAt(sg.ln, sg.s); sg.x = p.x + Math.sin(p.ang) * 6; sg.y = p.y - Math.cos(p.ang) * 6; R(sg.x - 1, sg.y - 1, 3, 3, '#2a2a2a'); }
+
+    // --- Solar + accumulators + labs
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 4; j++) { solars.push({ x: 114 + i * 4, y: 34 + j * 4 }); TR(114 + i * 4, 34 + j * 4, 3, 3, '#1b2a40'); R((114 + i * 4) * T + 1, (34 + j * 4) * T + 1, 16, 16, '#223a5c'); for (let k = 0; k < 3; k++) { R((114 + i * 4) * T + 1 + k * 6, (34 + j * 4) * T + 1, 1, 16, '#2f4e78'); R((114 + i * 4) * T + 1, (34 + j * 4) * T + 1 + k * 6, 16, 1, '#2f4e78'); } }
+    for (let i = 0; i < 10; i++) { accs.push({ x: 114 + i * 3, y: 51 }); TR(114 + i * 3, 51, 2, 2, '#4f5861'); R((114 + i * 3) * T + 2, 51 * T + 2, 8, 8, '#5c6670'); }
+    for (let i = 0; i < 4; i++) { labs.push({ x: 116 + i * 4, y: 58, ph: rnd() * 6 }); TR(116 + i * 4, 58, 3, 3, '#c9ced2'); R((116 + i * 4) * T + 1, 58 * T + 1, 16, 16, '#dfe3e6'); R((116 + i * 4) * T + 3, 58 * T + 3, 12, 12, '#9aa3ab'); inserter(117 + i * 4, 61, 3); }
+    beltPath([[114, 62], [134, 62]], [ITEM.red, ITEM.circuit, '#3a7bd5'], 'B-6');
+    lamp(112, 32); lamp(146, 32); lamp(112, 64); lamp(136, 64);
+    const radar = { x: 140, y: 58, ang: 0, sweep: -1 }; TR(140, 58, 3, 3, '#4d5258'); R(140 * T + 2, 58 * T + 2, 14, 14, '#555a60'); R(140 * T + 6, 58 * T + 10, 6, 6, '#3a3e43');
+
+    // --- Road + science block + storage yard
+    concrete(60, 63, 92, 2);
+    for (let i = 0; i < 6; i++) { assembler(64 + i * 5, 71); inserter(65 + i * 5, 70, 1); inserter(65 + i * 5, 74, 1); }
+    beltPath([[62, 69], [97, 69]], [ITEM.iron, ITEM.gear], 'B-9'); beltPath([[97, 75], [62, 75]], ['#e3bd3a', ITEM.circuit], 'B-10');
+    for (let i = 0; i < 6; i++) { assembler(64 + i * 5, 77); inserter(65 + i * 5, 76, 1); }
+    lamp(62, 67); lamp(98, 67); lamp(62, 80); lamp(98, 80);
+    concrete(72, 86, 20, 10); for (let i = 0; i < 8; i++) for (let j = 0; j < 4; j++) chest(74 + i * 2, 88 + j * 2, i % 3 === 0 ? '#c9a227' : '#7f8a92');
+    lamp(72, 86); lamp(92, 86); lamp(72, 96); lamp(92, 96);
+    // --- Hub
+    concrete(150, 54, 30, 26);
+    const roboport = { x: 160, y: 56 }; TR(160, 56, 4, 4, '#4c5055'); R(160 * T + 2, 56 * T + 2, 20, 20, '#5d6166'); R(160 * T + 10, 56 * T + 3, 4, 10, '#3a3d41'); R(160 * T + 4, 56 * T + 15, 4, 4, '#2f3236'); R(160 * T + 16, 56 * T + 15, 4, 4, '#2f3236');
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) chest(152 + i * 2, 61 + j * 2, j < 2 ? '#c9a227' : '#7f8a92');
+    for (let i = 0; i < 12; i++) chest(152 + i * 2, 72, '#7f8a92');
+    const lot = { x: 165, y: 60, w: 12, h: 10, phase: 'idle', t: 0, ents: [], ground: null, built: 0 };
+    lot.ground = g.getImageData(lot.x * T, lot.y * T, lot.w * T, lot.h * T);
+    lamp(150, 52); lamp(180, 52); lamp(150, 80); lamp(180, 80); lamp(165, 72);
+    const spider = { x: 156 * T, y: 77 * T, hx: 156 * T, hy: 77 * T, tx: 156 * T, ty: 77 * T, state: 'parked', t: 20, ph: 0, cd: 0, feet: [] };
+    for (let k = 0; k < 8; k++) { const a = k * .785 + .39; spider.feet.push({ x: spider.x + Math.cos(a) * 9, y: spider.y + Math.sin(a) * 7, a }); }
+    const car = { x: 150 * T, y: 64 * T, dir: -1, state: 'parked', t: 12 + rnd() * 20, v: 0 };
+
+    // --- Silo
+    const silo = { x: 122, y: 80, phase: 'build', parts: 0, t: 0, p: 0, launches: 0, pod: null };
+    concrete(120, 78, 13, 13); TR(122, 80, 9, 9, '#4a4f55'); R(122 * T + 3, 80 * T + 3, 48, 48, '#3e4348'); R(122 * T + 18, 80 * T + 6, 18, 42, '#2b2f33');
+    for (let i = 0; i < 27; i++) { const c = i % 2 ? '#e0b73a' : '#1f2124'; R(122 * T + i * 2, 80 * T, 2, 2, c); R(122 * T + i * 2, 80 * T + 52, 2, 2, c); R(122 * T, 80 * T + i * 2, 2, 2, c); R(122 * T + 52, 80 * T + i * 2, 2, 2, c); }
+    lamp(120, 78); lamp(132, 78); lamp(120, 90); lamp(132, 90);
+    inserter(121, 84, 0, true); beltPath([[112, 84], [120, 84]], ITEM.circuit, 'B-7');
+
+    // --- Oil
+    TR(70, 106, 22, 14, '#4a4232'); for (let i = 0; i < 60; i++) { const k = hash(i, 1, seed + 20), k2 = hash(i, 2, seed + 21); R(70 * T + k * 130, 106 * T + k2 * 80, 3, 2, '#2a2520'); }
+    for (let i = 0; i < 3; i++) { pumpjacks.push({ x: 72 + i * 7, y: 109, ph: rnd() * 6 }); TR(72 + i * 7, 109, 3, 3, '#4c4f54'); R((72 + i * 7) * T + 2, 109 * T + 10, 14, 6, '#5a5e63'); }
+    pipeH(72, 113, 22); pipeV(94, 109, 5);
+    TR(94, 106, 5, 5, '#55595e'); R(94 * T + 2, 106 * T + 2, 26, 26, '#656a70'); R(94 * T + 4, 106 * T + 4, 6, 22, '#4f545a'); R(94 * T + 12, 106 * T + 4, 6, 22, '#4f545a'); R(94 * T + 20, 106 * T + 4, 6, 22, '#4f545a');
+    chim.push({ x: 94 * T + 7, y: 106 * T + 4, rate: .7 }); chim.push({ x: 94 * T + 15, y: 106 * T + 4, rate: .7 }); chim.push({ x: 94 * T + 23, y: 106 * T + 4, rate: .9, flare: true });
+    TR(94, 112, 3, 3, '#6b7075'); R(94 * T + 2, 112 * T + 2, 14, 14, '#8a9096'); R(94 * T + 4, 112 * T + 4, 10, 10, '#6b7075');
+    pipeH(99, 108, 11);
+    for (let i = 0; i < 2; i++) { chem.push({ x: 110 + i * 4, y: 107, ph: rnd() * 6 }); TR(110 + i * 4, 107, 3, 3, '#4a5a4a'); R((110 + i * 4) * T + 2, 107 * T + 2, 14, 14, '#5c6e5a'); R((110 + i * 4) * T + 5, 107 * T + 5, 8, 8, '#2f3f2e'); chim.push({ x: (110 + i * 4) * T + 9, y: 107 * T + 3, rate: 1.2, tint: 1 }); }
+    for (let i = 0; i < 3; i++) { TR(110 + i * 3, 112, 2, 2, '#6b7075'); R((110 + i * 3) * T + 2, 112 * T + 2, 8, 8, '#8a9096'); }
+    for (let x = 72; x <= 112; x += 8) pole(x, 116, false);
+    lamp(92, 104); lamp(118, 104); lamp(70, 120); lamp(118, 118);
+
+    // --- Copper mine
+    for (let i = 0; i < 4; i++) drill(54 + i * 4, 120);
+    beltPath([[52, 118], [101, 118]], ITEM.copper, 'B-8'); inserter(102, 118, 0, true); inserter(102, 116, 0, true); inserter(102, 114, 0, true);
+    for (let x = 56; x <= 98; x += 7) pole(x, 123, false);
+    lamp(50, 116); lamp(70, 116);
+
+    // --- Outpost + nest
+    for (let x = 166; x <= 186; x++) { wall(x, 106); wall(x, 126); } for (let y = 107; y < 126; y++) { wall(166, y); wall(186, y); }
+    concrete(167, 107, 19, 19); turret(169, 109); turret(182, 109); turret(169, 122); turret(182, 122); turret(175, 115);
+    lamp(176, 110); lamp(176, 121); pole(176, 113, true);
+    for (let i = 0; i < 4; i++) { chest(170 + i * 2, 113, '#7f8a92'); chest(170 + i * 2, 118, '#c9a227'); }
+    TR(180, 114, 3, 3, '#4d5258'); R(180 * T + 2, 114 * T + 2, 14, 14, '#555a60'); R(180 * T + 5, 114 * T + 5, 8, 8, '#2d3034');
+    const spawners = [{ x: 199 * T, y: 112 * T }, { x: 198 * T, y: 126 * T }];
+    for (const sp of spawners) { g.fillStyle = '#8a3f4a'; g.beginPath(); g.ellipse(sp.x, sp.y, 14, 11, 0, 0, 7); g.fill(); g.fillStyle = '#a65a5a'; g.beginPath(); g.ellipse(sp.x - 2, sp.y - 2, 9, 7, 0, 0, 7); g.fill(); g.fillStyle = '#d58a7a'; g.beginPath(); g.ellipse(sp.x + 3, sp.y + 1, 3, 3, 0, 0, 7); g.fill(); g.beginPath(); g.ellipse(sp.x - 6, sp.y + 3, 2, 2, 0, 0, 7); g.fill(); }
+    const worms = [{ x: 195 * T, y: 119 * T, ph: 0 }, { x: 202 * T, y: 132 * T, ph: 2 }];
+    for (const w of worms) { g.fillStyle = '#b86a60'; g.beginPath(); g.ellipse(w.x, w.y, 6, 5, 0, 0, 7); g.fill(); }
+
+    // wires
+    g.strokeStyle = 'rgba(40,40,40,.9)'; g.lineWidth = 1;
+    const wire = (a, b) => { g.beginPath(); g.moveTo(a.x * T + 3, a.y * T + 1); g.quadraticCurveTo((a.x + b.x) * T / 2 + 3, (a.y + b.y) * T / 2 + 5, b.x * T + 3, b.y * T + 1); g.stroke(); };
+    for (let i = 1; i < bigs.length; i++) wire({ x: bigs[i - 1][0], y: bigs[i - 1][1] }, { x: bigs[i][0], y: bigs[i][1] });
+    const smalls = poles.filter(p => !p.big); for (let i = 1; i < smalls.length; i++) { const a = smalls[i - 1], b = smalls[i]; if (Math.hypot(a.x - b.x, a.y - b.y) <= 9) wire(a, b); }
+
+    // inserter item colours (from the adjacent belt) and station binding
+    for (const it of ins) { for (const p of paths) { for (const tl of p.tiles) if (Math.abs(tl.x - it.x) + Math.abs(tl.y - it.y) === 1) { it.p = p; it.c = p.cols[0]; break; } if (it.p) break; } if (!it.c) it.c = MIX[(rnd() * MIX.length) | 0]; for (const st of stations) if (Math.hypot(it.x * T + 3 - st.x, it.y * T + 3 - st.y) < 34) it.st = st; }
+
+    // ---------- glow sprite ----------
+    const GLOW = document.createElement('canvas'); GLOW.width = GLOW.height = 64; { const gg = GLOW.getContext('2d'); const gr = gg.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,214,150,.55)'); gr.addColorStop(.35, 'rgba(255,190,110,.22)'); gr.addColorStop(1, 'rgba(255,170,80,0)'); gg.fillStyle = gr; gg.fillRect(0, 0, 64, 64); }
+
+    // ---------- dynamic state ----------
+    const hubs = [].concat(asm.map(a => ({ x: a.x * T + 9, y: a.y * T + 9 })), chests.slice(0, 18).map(c => ({ x: c.x * T + 3, y: c.y * T + 3 })), [{ x: roboport.x * T + 12, y: roboport.y * T + 12 }], labs.map(l => ({ x: l.x * T + 9, y: l.y * T + 9 })));
+    const bots = [], cbots = [], smoke = [], biters = [], corpses = [], tracers = [], flashes = [], embers = [], splats = [], ripples = [], fish = [];
+    for (let i = 0; i < 9 && nearShoreWater.length; i++) { const k = (rnd() * nearShoreWater.length / 2) | 0; fish.push({ x: nearShoreWater[k * 2] * T + 3, y: nearShoreWater[k * 2 + 1] * T + 3, a: rnd() * 6.3, t: rnd() * 5, jump: 0 }); }
+    const trains = [
+      { ln: loop, s: 20 * T, dir: 1, cars: ['loco', 'cargo', 'cargo', 'cargo'], wait: 0, last: -1, speed: 34, id: 'L-7', cargo: ITEM.ore, puff: 0 },
+      { ln: loop, s: 200 * T, dir: 1, cars: ['loco', 'fluid', 'fluid', 'cargo'], wait: 0, last: -1, speed: 32, id: 'L-3', cargo: ITEM.plastic, puff: 0 },
+      { ln: main, s: -40, dir: 1, cars: ['loco', 'cargo', 'cargo', 'cargo', 'cargo'], wait: 0, last: -1, speed: 38, id: 'M-1', cargo: ITEM.copper, puff: 0 },
+    ];
+    const raid = { active: false, n: 0, killed: 0, t: 0, wallDmg: 0, engaged: false, cooldown: 28, pollution: .35 };
+    const research = { t: 0, i: 0, names: ['automation-2', 'advanced-material-processing', 'railway', 'solar-energy', 'oil-processing', 'robotics', 'rocket-silo'] };
+    const jam = { t: 30, path: null };
+    const power = { sat: 1, acc: 1, brown: 0 };
+    const cam = { x: 84 * T, y: 46 * T, tx: 84 * T, ty: 46 * T, linger: 5, hold: 0, zb: 0, zt: 0 };
+    const POI = [{ x: 84, y: 46 }, { x: 50, y: 74 }, { x: 152, y: 34 }, { x: 164, y: 68 }, { x: 126, y: 84 }, { x: 176, y: 116 }, { x: 92, y: 112 }, { x: 64, y: 118 }, { x: 128, y: 48 }, { x: 124, y: 60 }, { x: 80, y: 74 }];
+    let poi = 0, t = 0, last = performance.now(), nextAmbient = 7, lastAmb = -1, lightning = 0, nextBolt = 20 + rnd() * 20;
+    const stats = { rockets: 0, trainsArr: 0, repelled: 0, science: 212, built: 0 };
+    const AMB = ['inserter#4 → furnace: iron-plate ×2', 'belt B-2 throughput 14.8/s', 'drill cluster D-4: 212 ore remaining', 'solar field at 98% · accumulators charging', 'boiler#2 steam 165°C · engines 3/3', 'lamp grid online · 0 faults', 'complex C-1 crafting: electronic-circuit', 'pumpjack PJ-2 yield 71%', 'refinery: advanced-oil-processing · 2 cycles', 'logistic network: 1,204 iron-plate in storage', 'roboport RP-1 charging 4 bots', 'offshore pump OP-1: 1200/s', 'circuit: inserter#9 enabled (iron-plate < 400)', 'chem plant CP-1: plastic-bar ×2', 'furnace row F-2: 7/7 heating', 'fish spotted off OP-1 · 9 in school', 'storage yard: 61% full', 'assembler A-1-3: iron-gear-wheel ×4'];
+    const queue = []; let qT = 0;
+    const emit = (s) => { queue.push(s); };
+    const flushQueue = (dt) => { qT -= dt; if (qT <= 0 && queue.length) { const s = queue.shift(); if (typeof self.props.onEvent === 'function') self.props.onEvent(s); qT = .9; } };
+
+    // ---------- sizing / input ----------
+    let cssW = 1, cssH = 1, dpr = 1;
+    const size = () => { const r = cv.getBoundingClientRect(); cssW = Math.max(1, r.width); cssH = Math.max(1, r.height); dpr = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(4e6 / (cssW * cssH))); dpr = dpr >= 1.5 ? Math.floor(dpr) : 1; cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr); };
+    size(); if (window.ResizeObserver) { this.ro = new ResizeObserver(() => { size(); if (self.prop('still', false) && self.frame) self.frame(performance.now()); }); this.ro.observe(cv); }
+    let view = { z: 2.4, vx0: 0, vy0: 0 };
+    cv.addEventListener('click', (e) => { const r = cv.getBoundingClientRect(); const wx = view.vx0 + (e.clientX - r.left) / view.z, wy = view.vy0 + (e.clientY - r.top) / view.z; cam.tx = wx; cam.ty = wy; cam.linger = 14; ripples.push({ x: wx, y: wy, t: 0, c: 'rgba(240,176,84,.8)' }); emit('camera → tile (' + Math.round(wx / T) + ',' + Math.round(wy / T) + ')'); if (self.prop('still', false) && self.frame) { cam.x = wx; cam.y = wy; self.frame(performance.now()); } });
+
+    // ---------- helpers ----------
+    const nightOf = () => { const tm = this.prop('time', 'dusk'); if (tm === 'cycle') { const ph = (t % 160) / 160; return ph < .42 ? 0 : ph < .5 ? (ph - .42) * 12.5 : ph < .9 ? 1 : 1 - (ph - .9) * 10; } return tm === 'night' ? 1 : tm === 'dusk' ? .55 : 0; };
+    const carLen = (k) => k === 'loco' ? 13 : 12;
+    const puff = (x, y, o) => smoke.push(Object.assign({ x, y, vx: 2 + rnd() * 2, vy: -3 - rnd() * 2, a: 0, life: 3, r: 1, tint: 0 }, o || {}));
+
+    // ---------- simulation ----------
+    function simBelts(dt) {
+      for (const p of paths) { if (p === jam.path) continue; const v = p.speed * dt; for (const it of p.items) { it.s += v; if (it.s >= p.L) it.s -= p.L; } p.items.sort((a, b) => a.s - b.s); for (let i = 1; i < p.items.length; i++) if (p.items[i].s - p.items[i - 1].s < 3.2) p.items[i].s = p.items[i - 1].s + 3.2; }
+      jam.t -= dt;
+      if (jam.t <= 0) { if (jam.path) { emit('belt ' + jam.path.name + ' cleared · inserters resumed'); jam.path = null; jam.t = 45 + rnd() * 40; } else { jam.path = paths[(rnd() * paths.length) | 0]; emit('belt ' + jam.path.name + ' backed up · ' + (3 + (rnd() * 5 | 0)) + ' inserters waiting'); jam.t = 6 + rnd() * 4; } }
+    }
+    function simSmoke(dt) {
+      for (const c of chim) { if (rnd() < dt * 4 * c.rate) smoke.push({ x: c.x + rnd() * 2 - 1, y: c.y, vx: 3 + rnd() * 2, vy: -4 - rnd() * 3, a: 0, life: 8 + rnd() * 6, r: 1.5 + rnd(), tint: c.tint || 0 }); }
+      for (let i = smoke.length - 1; i >= 0; i--) { const s = smoke[i]; s.a += dt; s.x += s.vx * dt; s.y += s.vy * dt; s.vy *= (1 - dt * .3); s.r += dt * 1.1; if (s.a > s.life) { smoke[i] = smoke[smoke.length - 1]; smoke.pop(); } }
+      for (let i = embers.length - 1; i >= 0; i--) { const e = embers[i]; e.t += dt; e.x += e.vx * dt; e.y += e.vy * dt; if (e.t > e.life) { embers[i] = embers[embers.length - 1]; embers.pop(); } }
+      for (let i = splats.length - 1; i >= 0; i--) { const e = splats[i]; e.t += dt; e.x += e.vx * dt; e.y += e.vy * dt; e.vy += 30 * dt; if (e.t > .5) { splats[i] = splats[splats.length - 1]; splats.pop(); } }
+      for (let i = ripples.length - 1; i >= 0; i--) { ripples[i].t += dt; if (ripples[i].t > 1.4) ripples.splice(i, 1); }
+      raid.pollution += dt * .018 * (1 + chem.length * .1);
+      for (const e of engines) { e.puff -= dt; if (e.puff <= 0) { e.puff = .35 + rnd() * .2; puff(e.x * T + 29, e.y * T + 7, { vx: 4, vy: -5, life: 1.6, r: .8 }); } }
+      for (const a of asm) { a.next -= dt; a.blink -= dt; if (a.next <= 0) { a.next = 3 + rnd() * 4; a.blink = .18; } }
+    }
+    function simTrains(dt) {
+      for (const st of stations) st.busy = false;
+      for (const tr of trains) {
+        if (tr.wait > 0) { tr.wait -= dt; const st = stations.find(s => s.ln === tr.ln && s.s === tr.last); if (st) st.busy = true; continue; }
+        const before = tr.s; tr.s += tr.speed * tr.dir * dt;
+        tr.puff -= dt; if (tr.puff <= 0) { tr.puff = .16; const h = posAt(tr.ln, tr.s - tr.dir * 3); puff(h.x, h.y, { vx: -Math.cos(h.ang) * tr.dir * 6, vy: -Math.sin(h.ang) * tr.dir * 6 - 2, life: 1.3, r: .7, dark: true }); }
+        for (const st of stations) if (st.ln === tr.ln && tr.last !== st.s) { const a = Math.min(before, tr.s), b = Math.max(before, tr.s); const hit = tr.ln.closed ? (((st.s - a) % tr.ln.L + tr.ln.L) % tr.ln.L <= b - a) : (st.s >= a && st.s <= b); if (hit) { tr.s = st.s; tr.wait = 4.5; tr.last = st.s; stats.trainsArr++; emit('train ' + tr.id + ' arrived · ' + st.name); for (let k = 0; k < 6; k++) puff(st.x + rnd() * 20 - 10, st.y + rnd() * 6 - 3, { vx: rnd() * 4 - 2, vy: -1, life: 1.2, r: 1.2 }); } }
+        if (!tr.ln.closed) { const len = tr.cars.length * 13 + 20; if (tr.dir > 0 && tr.s > tr.ln.L + len) { tr.dir = -1; tr.s = tr.ln.L + len; tr.last = -1; } else if (tr.dir < 0 && tr.s < -len) { tr.dir = 1; tr.s = -len; tr.last = -1; } }
+      }
+      for (const sg of signals) { let red = false; for (const tr of trains) { if (tr.ln !== sg.ln) continue; const len = tr.cars.length * 13; const head = tr.s, tail = tr.s - tr.dir * len; const d = sg.ln.closed ? ((head - sg.s) % sg.ln.L + sg.ln.L) % sg.ln.L : head - sg.s; if (tr.dir > 0 ? (d >= 0 && d < len + 60) : (sg.s >= Math.min(head, tail) - 60 && sg.s <= Math.max(head, tail))) red = true; } if (red !== sg.red) { sg.red = red; if (rnd() < .2) emit('signal S-' + (1 + signals.indexOf(sg)) + ' → ' + (red ? 'red' : 'green')); } }
+    }
+    function simBots(dt) {
+      if (bots.length < 10 && rnd() < dt * .6) { const a = hubs[(rnd() * hubs.length) | 0], b = hubs[(rnd() * hubs.length) | 0]; bots.push({ x: a.x, y: a.y, tx: b.x, ty: b.y, v: 16 + rnd() * 10, item: rnd() < .6 ? MIX[(rnd() * MIX.length) | 0] : null, ph: rnd() * 6 }); }
+      for (const b of bots) { const dx = b.tx - b.x, dy = b.ty - b.y, d = Math.hypot(dx, dy); if (d < 2) { const e = hubs[(rnd() * hubs.length) | 0]; b.tx = e.x; b.ty = e.y; b.item = rnd() < .5 ? null : MIX[(rnd() * MIX.length) | 0]; } else { b.x += dx / d * b.v * dt; b.y += dy / d * b.v * dt; } b.ph += dt * 4; }
+      // car: drives the concrete road between the smelter and the hub
+      car.t -= dt;
+      if (car.state === 'parked' && car.t <= 0) { car.state = 'drive'; car.dir = car.x > 100 * T ? -1 : 1; emit('car C-1 → ' + (car.dir < 0 ? 'smelter' : 'hub')); }
+      if (car.state === 'drive') { car.v = Math.min(44, car.v + 30 * dt); car.x += car.v * car.dir * dt; if ((car.dir < 0 && car.x < 62 * T) || (car.dir > 0 && car.x > 150 * T)) { car.state = 'parked'; car.t = 25 + rnd() * 30; car.v = 0; } }
+      // fish
+      for (const f of fish) { f.t -= dt; if (f.jump > 0) { f.jump -= dt; continue; } if (f.t <= 0) { f.t = 2 + rnd() * 5; if (rnd() < .25) { f.jump = .7; ripples.push({ x: f.x, y: f.y, t: 0, c: 'rgba(200,230,240,.7)' }); } else f.a += (rnd() - .5) * 2.4; } const nx = f.x + Math.cos(f.a) * 4 * dt, ny = f.y + Math.sin(f.a) * 4 * dt; if (isWater(Math.floor(nx / T), Math.floor(ny / T))) { f.x = nx; f.y = ny; } else f.a += 2.8; }
+    }
+    function lotEntities() { const e = []; for (let i = 0; i < 3; i++) e.push({ k: 'asm', x: lot.x + 1 + i * 4, y: lot.y + 1 }); for (let i = 0; i < 3; i++) e.push({ k: 'ins', x: lot.x + 2 + i * 4, y: lot.y + 4 }); e.push({ k: 'belt', x: lot.x + 1, y: lot.y + 5, len: 11 }); for (let i = 0; i < 3; i++) e.push({ k: 'ins', x: lot.x + 2 + i * 4, y: lot.y + 6 }); for (let i = 0; i < 3; i++) e.push({ k: 'asm', x: lot.x + 1 + i * 4, y: lot.y + 7 }); e.push({ k: 'lamp', x: lot.x + 11, y: lot.y + 1 }); return e; }
+    function buildEnt(e) { if (e.k === 'asm') { TR(e.x, e.y, 3, 3, '#3f4b5c'); R(e.x * T + 1, e.y * T + 1, 16, 16, '#4f5d70'); R(e.x * T + 1, e.y * T + 1, 16, 2, '#d9a23a'); R(e.x * T + 6, e.y * T + 6, 6, 6, '#2b333d'); } else if (e.k === 'ins') { TR(e.x, e.y, 1, 1, '#34363a'); R(e.x * T + 2, e.y * T + 2, 2, 2, '#1f2022'); } else if (e.k === 'belt') { for (let i = 0; i < e.len; i++) { TR(e.x + i, e.y, 1, 1, '#2e2f31'); R((e.x + i) * T, e.y * T + 1, 6, 4, '#3a3b3e'); } } else if (e.k === 'lamp') { R(e.x * T + 2, e.y * T + 2, 2, 4, '#8a8f94'); R(e.x * T + 1, e.y * T + 1, 4, 2, '#c9ced2'); } }
+    function simLot(dt) {
+      lot.t -= dt;
+      const entPos = e => ({ x: e.x * T + (e.k === 'belt' ? e.len * 3 : e.k === 'asm' ? 9 : 3), y: e.y * T + (e.k === 'asm' ? 9 : 3) });
+      if (lot.phase === 'idle' && lot.t <= 0) { lot.phase = 'ghost'; lot.ents = lotEntities().map(e => ({ ...e, built: false, bot: null })); lot.t = 2.5; emit('blueprint placed: ' + lot.ents.length + ' ghosts · 5 construction bots dispatched'); }
+      else if (lot.phase === 'ghost' && lot.t <= 0) { lot.phase = 'build'; for (let i = 0; i < 5; i++) cbots.push({ x: roboport.x * T + 12, y: roboport.y * T + 12, tx: 0, ty: 0, job: null, v: 22, hover: 0, mode: 'build' }); }
+      else if (lot.phase === 'build') {
+        let pending = lot.ents.filter(e => !e.built && !e.bot);
+        for (const b of cbots) { if (b.mode !== 'build') continue; if (!b.job) { if (!pending.length) continue; b.job = pending.shift(); b.job.bot = b; } const e = b.job, ep = entPos(e); const dx = ep.x - b.x, dy = ep.y - b.y, d = Math.hypot(dx, dy); if (d > 2) { b.x += dx / d * b.v * dt; b.y += dy / d * b.v * dt; } else { b.hover += dt; if (b.hover > 1.1) { buildEnt(e); e.built = true; flashes.push({ x: ep.x, y: ep.y, t: .35 }); stats.built++; b.job = null; b.hover = 0; } } }
+        if (lot.ents.every(e => e.built)) { lot.phase = 'standing'; lot.t = 50 + rnd() * 30; emit('construction complete · assembly block A-2 online'); for (const b of cbots) if (b.mode === 'build') { b.job = null; b.tx = roboport.x * T + 12; b.ty = roboport.y * T + 12; b.mode = 'home'; } }
+      }
+      else if (lot.phase === 'standing') { if (lot.t <= 0) { lot.phase = 'decon'; emit('deconstruction planned: A-2 (upgrading to assembler-3)'); for (const e of lot.ents) { e.built = true; e.bot = null; } for (let i = 0; i < 5; i++) cbots.push({ x: roboport.x * T + 12, y: roboport.y * T + 12, job: null, v: 22, hover: 0, mode: 'decon' }); } }
+      else if (lot.phase === 'decon') {
+        let pending = lot.ents.filter(e => e.built && !e.bot);
+        for (const b of cbots) { if (b.mode !== 'decon') continue; if (!b.job) { if (!pending.length) continue; b.job = pending.shift(); b.job.bot = b; } const e = b.job, ep = entPos(e); const dx = ep.x - b.x, dy = ep.y - b.y, d = Math.hypot(dx, dy); if (d > 2) { b.x += dx / d * b.v * dt; b.y += dy / d * b.v * dt; } else { b.hover += dt; if (b.hover > .8) { e.built = false; const w = e.k === 'asm' ? 3 : e.k === 'belt' ? e.len : 1, h = e.k === 'asm' ? 3 : 1; g.putImageData(lot.ground, lot.x * T, lot.y * T, (e.x - lot.x) * T, (e.y - lot.y) * T, w * T, h * T); b.job = null; b.hover = 0; } } }
+        if (lot.ents.every(e => !e.built)) { lot.phase = 'idle'; lot.t = 25 + rnd() * 20; emit('deconstruction complete · ' + lot.ents.length + ' entities returned to storage'); for (const b of cbots) if (b.mode === 'decon') { b.mode = 'home'; b.tx = roboport.x * T + 12; b.ty = roboport.y * T + 12; } }
+      }
+      for (let i = cbots.length - 1; i >= 0; i--) { const b = cbots[i]; if (b.mode !== 'home') continue; const dx = b.tx - b.x, dy = b.ty - b.y, d = Math.hypot(dx, dy); if (d > 2) { b.x += dx / d * b.v * dt; b.y += dy / d * b.v * dt; } else cbots.splice(i, 1); }
+    }
+    function simRaid(dt) {
+      if (!raid.active && biters.length < 4 && rnd() < dt * .5) { const sp = spawners[(rnd() * 2) | 0]; biters.push({ x: sp.x + rnd() * 20 - 10, y: sp.y + rnd() * 20 - 10, hp: 3, big: false, ph: rnd() * 6, idle: true, ax: sp.x + rnd() * 50 - 25, ay: sp.y + rnd() * 50 - 25 }); }
+      raid.cooldown -= dt;
+      if (!raid.active && raid.cooldown <= 0 && raid.pollution >= 1) {
+        raid.active = true; raid.engaged = false; raid.t = 0; raid.killed = 0; raid.wallDmg = 0;
+        raid.n = 8 + Math.min(10, (raid.pollution * 5) | 0); raid.pollution = .2;
+        for (let i = 0; i < raid.n; i++) { const sp = spawners[i % 2]; const big = rnd() < .22; biters.push({ x: sp.x + 10 + rnd() * 30, y: sp.y + rnd() * 30 - 15, hp: big ? 9 : 4, big, ph: rnd() * 6, idle: false, v: (big ? 11 : 15) + rnd() * 3, wig: rnd() * 6 }); }
+        emit('pollution cloud reached nest N-1 · ' + raid.n + ' biters inbound → outpost O-1');
+        cam.tx = 180 * T; cam.ty = 116 * T; cam.linger = 999;
+        if (spider.state === 'parked') { spider.state = 'out'; spider.tx = 178 * T; spider.ty = 116 * T; emit('spidertron S-1 responding → O-1'); }
+      }
+      for (const b of biters) { b.ph += dt * 10; if (b.idle) { const dx = b.ax - b.x, dy = b.ay - b.y, d = Math.hypot(dx, dy); if (d < 2) { b.ax = b.x + rnd() * 40 - 20; b.ay = b.y + rnd() * 40 - 20; } else { b.x += dx / d * 5 * dt; b.y += dy / d * 5 * dt; } continue; } if (b.ty === undefined) b.ty = (109 + rnd() * 15) * T + 3; const dx = 187 * T + 2 - b.x, dy = b.ty - b.y, d = Math.hypot(dx, dy); if (d > 4) { b.x += (dx / d * b.v + Math.sin(t * 3 + b.wig) * 4) * dt; b.y += (dy / d * b.v + Math.cos(t * 2.3 + b.wig) * 4) * dt; } else { b.att = (b.att || 0) + dt; if (b.att > .7) { b.att = 0; let w = null, bd = 99; for (const s of walls) { if (s.x !== 186 || s.dmg >= 3) continue; const sd = Math.abs(s.y * T + 3 - b.y); if (sd < bd) { bd = sd; w = s; } } if (w) { if (!w.dmg) raid.wallDmg++; w.dmg++; flashes.push({ x: w.x * T + 3, y: w.y * T + 3, t: .25, red: true }); } } } }
+      for (const sp of spawners) sp.pulse = 1 + Math.sin(t * 1.7 + sp.x) * .08;
+      for (const tu of turrets) { tu.cd -= dt; tu.flash -= dt; tu.recoil = Math.max(0, tu.recoil - dt * 12); const cx = tu.x * T + 6, cy = tu.y * T + 6; let best = null, bd = 66; for (const b of biters) { if (b.idle) continue; const d = Math.hypot(b.x - cx, b.y - cy); if (d < bd) { bd = d; best = b; } } tu.tgt = best; if (best) { tu.ang = Math.atan2(best.y - cy, best.x - cx); if (tu.cd <= 0) { tu.cd = .3 + rnd() * .12; tu.flash = .06; tu.recoil = 2; tracers.push({ x1: cx, y1: cy, x2: best.x, y2: best.y, t: .07 }); embers.push({ x: cx + Math.cos(tu.ang + 1.57) * 3, y: cy + Math.sin(tu.ang + 1.57) * 3, vx: Math.cos(tu.ang + 1.9) * 14, vy: Math.sin(tu.ang + 1.9) * 14, t: 0, life: .35, c: '#e0b73a' }); best.hp -= 1; if (!raid.engaged) { raid.engaged = true; emit('turret T-' + tu.id + ' engaging · ' + raid.n + ' hostiles in range'); } } } else tu.ang += dt * .3; }
+      // spidertron lasers
+      spider.cd -= dt; if (spider.cd <= 0 && raid.active) { let best = null, bd = 56; for (const b of biters) { if (b.idle) continue; const d = Math.hypot(b.x - spider.x, b.y - spider.y); if (d < bd) { bd = d; best = b; } } if (best) { spider.cd = .5; tracers.push({ x1: spider.x, y1: spider.y - 3, x2: best.x, y2: best.y, t: .1, laser: true }); best.hp -= 2; } }
+      for (let i = biters.length - 1; i >= 0; i--) { const b = biters[i]; if (b.hp <= 0) { corpses.push({ x: b.x, y: b.y, t: 0, big: b.big }); for (let k = 0; k < 6; k++) splats.push({ x: b.x, y: b.y, vx: rnd() * 30 - 15, vy: -rnd() * 20, t: 0, c: b.big ? '#5c6f9a' : '#a84a4a' }); biters.splice(i, 1); raid.killed++; } }
+      for (let i = corpses.length - 1; i >= 0; i--) { corpses[i].t += dt; if (corpses[i].t > 30) corpses.splice(i, 1); }
+      for (let i = tracers.length - 1; i >= 0; i--) { tracers[i].t -= dt; if (tracers[i].t <= 0) tracers.splice(i, 1); }
+      for (let i = flashes.length - 1; i >= 0; i--) { flashes[i].t -= dt; if (flashes[i].t <= 0) flashes.splice(i, 1); }
+      if (raid.active) { raid.t += dt; const alive = biters.filter(b => !b.idle).length; if (alive === 0 || raid.t > 60) { raid.active = false; raid.cooldown = 40 + rnd() * 30; stats.repelled += raid.killed; emit('defense: ' + raid.killed + '/' + raid.n + ' biters repelled · wall segments damaged: ' + raid.wallDmg); cam.linger = 4; if (raid.wallDmg) { emit('construction bots repairing wall (' + raid.wallDmg + ')'); for (let i = 0; i < Math.min(4, raid.wallDmg); i++) cbots.push({ x: roboport.x * T + 12, y: roboport.y * T + 12, job: null, v: 24, hover: 0, mode: 'repair', tx: 186 * T + 3, ty: (110 + i * 4) * T + 3 }); } } }
+      for (let i = cbots.length - 1; i >= 0; i--) { const b = cbots[i]; if (b.mode !== 'repair') continue; const dx = b.tx - b.x, dy = b.ty - b.y, d = Math.hypot(dx, dy); if (d > 2) { b.x += dx / d * b.v * dt; b.y += dy / d * b.v * dt; } else { b.hover += dt; if (b.hover > 1.5) { for (const w of walls) w.dmg = 0; b.mode = 'home'; b.tx = roboport.x * T + 12; b.ty = roboport.y * T + 12; } } }
+    }
+    function simSilo(dt) {
+      silo.t += dt;
+      if (silo.phase === 'build') { silo.parts = Math.min(100, silo.parts + dt * 1.5); if (silo.parts >= 100) { silo.phase = 'ready'; silo.t = 0; emit('rocket silo: 100/100 parts · launch sequence started (T-10)'); cam.tx = 126 * T; cam.ty = 80 * T; cam.linger = 999; } }
+      else if (silo.phase === 'ready') { if (silo.t > 10) { silo.phase = 'launch'; silo.t = 0; silo.p = 0; } }
+      else if (silo.phase === 'launch') { silo.p = silo.t / 7; if (silo.t < .2) { for (let i = 0; i < 24; i++) smoke.push({ x: silo.x * T + 27 + rnd() * 30 - 15, y: silo.y * T + 30, vx: (rnd() - .5) * 22, vy: -3 - rnd() * 6, a: 0, life: 6 + rnd() * 4, r: 3 + rnd() * 2, tint: 0 }); } if (silo.p < .5 && rnd() < dt * 20) smoke.push({ x: silo.x * T + 27 + rnd() * 4 - 2, y: silo.y * T + 27 - silo.p * silo.p * 520 + 14, vx: (rnd() - .5) * 6, vy: 2, a: 0, life: 2.5, r: 1.2, tint: 0 }); if (silo.p >= 1) { silo.phase = 'gone'; silo.t = 0; silo.launches++; stats.rockets++; emit('rocket launched · payload: satellite'); cam.linger = 3; } }
+      else if (silo.phase === 'gone') { if (silo.t > 9 && !silo.pod) { silo.pod = { y: -90, x: silo.x * T + 27 + 40, t: 0 }; emit('cargo pod re-entering · tracking…'); cam.tx = 128 * T; cam.ty = 76 * T; cam.linger = 16; } if (silo.pod) { silo.pod.t += dt; silo.pod.y += (silo.pod.y < silo.y * T + 20 ? 14 : 0) * dt; silo.pod.x -= 2.2 * dt; if (silo.pod.y >= silo.y * T + 20 && !silo.pod.landed) { silo.pod.landed = true; silo.pod.t = 0; emit('cargo pod recovered · 1 space-science-pack'); stats.science += 10; for (let k = 0; k < 8; k++) puff(silo.pod.x + rnd() * 8 - 4, silo.pod.y, { vx: rnd() * 6 - 3, vy: -1, life: 1.5, r: 1.3 }); } if (silo.pod.landed && silo.pod.t > 6) { silo.phase = 'build'; silo.parts = 0; silo.pod = null; } } }
+    }
+    function simMisc(dt) {
+      radar.ang += dt * 1.6; radar.sweep -= dt; if (radar.sweep < -16) { radar.sweep = 2.2; emit('radar RD-1 charted sector (' + ((rnd() * 40 - 20) | 0) + ',' + ((rnd() * 40 - 20) | 0) + ')'); }
+      research.t += dt / 48; if (research.t >= 1) { research.t = 0; emit('research complete: ' + research.names[research.i % research.names.length]); research.i++; emit('research started: ' + research.names[research.i % research.names.length]); stats.science += 40; }
+      for (const pj of pumpjacks) pj.ph += dt * 1.8;
+      for (const l of labs) l.ph += dt * 2;
+      const night = nightOf(); if (night > .5) power.acc = Math.max(.12, power.acc - dt * .012); else power.acc = Math.min(1, power.acc + dt * .02);
+      power.brown -= dt;
+      if (power.acc <= .15 && power.brown < -20) { power.brown = 3.5; emit('power: accumulators 14% · brownout · steam engines to full load'); }
+      power.sat = power.brown > 0 ? .62 + Math.sin(t * 30) * .08 : 1;
+      // spidertron gait: feet step when they trail too far behind the body
+      spider.t -= dt; spider.ph += dt * 9;
+      if (spider.state === 'parked' && spider.t <= 0) { spider.state = 'out'; spider.tx = 176 * T; spider.ty = 118 * T; emit('spidertron S-1 → outpost O-1 (ammo resupply)'); }
+      if (spider.state !== 'parked') { const dx = spider.tx - spider.x, dy = spider.ty - spider.y, d = Math.hypot(dx, dy); if (d > 3) { spider.x += dx / d * 20 * dt; spider.y += dy / d * 20 * dt; } else if (spider.state === 'out') { if (!raid.active) { spider.state = 'back'; spider.tx = spider.hx; spider.ty = spider.hy; } } else { spider.state = 'parked'; spider.t = 70 + rnd() * 40; emit('spidertron S-1 returned to hub'); } }
+      for (const f of spider.feet) { const hx = spider.x + Math.cos(f.a) * 9, hy = spider.y + Math.sin(f.a) * 7; if (Math.hypot(hx - f.x, hy - f.y) > 7) { f.x = hx + (spider.tx - spider.x > 0 ? 4 : -4) * (spider.state !== 'parked'); f.y = hy; f.lift = .18; } f.lift = Math.max(0, (f.lift || 0) - dt); }
+      // weather
+      if (!!self.prop('rain', false)) { nextBolt -= dt; lightning = Math.max(0, lightning - dt * 6); if (nextBolt <= 0) { nextBolt = 18 + rnd() * 30; lightning = 1; if (rnd() < .5) emit('storm: lightning strike · grid at 100%, no faults'); } } else lightning = 0;
+      if (t >= nextAmbient) { nextAmbient = t + 2.4 + rnd() * 2.6; if (!queue.length) { let i = (rnd() * AMB.length) | 0; if (i === lastAmb) i = (i + 1) % AMB.length; lastAmb = i; emit(AMB[i]); } }
+    }
+    function simCam(dt, vw, vh) {
+      const held = (raid.active && cam.linger > 900) || (silo.phase === 'ready' || silo.phase === 'launch');
+      if (!held) { cam.linger -= dt; if (cam.linger <= 0) { let n = poi; while (n === poi) n = (rnd() * POI.length) | 0; poi = n; cam.tx = POI[n].x * T; cam.ty = POI[n].y * T; cam.linger = 9 + rnd() * 6; } }
+      const k = 1 - Math.exp(-dt * (held ? .9 : .32)); cam.x += (cam.tx - cam.x) * k; cam.y += (cam.ty - cam.y) * k;
+      cam.zt = silo.phase === 'launch' ? -.12 : raid.active ? .06 : 0;
+      cam.zb += ((Math.sin(t * .11) * .04 + cam.zt) - cam.zb) * (1 - Math.exp(-dt * .8));
+      cam.x = clamp(cam.x, vw / 2, WPX - vw / 2); cam.y = clamp(cam.y, vh / 2, HPX - vh / 2);
+    }
+
+    // ---------- drawing ----------
+    function drawDyn(night, vx0, vy0, vx1, vy1) {
+      const inV = (x, y, m) => x > vx0 - m && x < vx1 + m && y > vy0 - m && y < vy1 + m;
+      // water: sparkle, shore foam, ripples, fish
+      ctx.fillStyle = 'rgba(190,220,230,.35)'; for (let i = 0; i < 40; i++) { const k = (rnd() * waterTiles.length / 2) | 0; const x = waterTiles[k * 2] * T, y = waterTiles[k * 2 + 1] * T; if (inV(x, y, 0) && hash(k, (t * 2) | 0, 1) > .5) ctx.fillRect(x + ((t * 7 + k) % 5 | 0), y + 2, 2, 1); }
+      ctx.fillStyle = 'rgba(220,235,240,.42)'; for (let i = 0; i < shoreWater.length; i += 2) { const x = shoreWater[i] * T, y = shoreWater[i + 1] * T; if (!inV(x, y, 0)) continue; const w = Math.sin(t * 1.6 + x * .07 + y * .05); if (w > .2) ctx.fillRect(x + 1 + ((w * 3) | 0), y + 2 + ((Math.cos(t + x) * 1.5) | 0), 3, 1); }
+      for (const f of fish) { if (!inV(f.x, f.y, 6)) continue; if (f.jump > 0) { const h = Math.sin(f.jump / .7 * Math.PI) * 5; ctx.fillStyle = '#9fb4c0'; ctx.fillRect(f.x - 1.5, f.y - h - 1, 3, 1.5); } else { ctx.fillStyle = 'rgba(40,70,90,.9)'; ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.a); ctx.fillRect(-2, -.7, 4, 1.4); ctx.fillRect(-3, -1.2, 1, 2.4); ctx.restore(); } }
+      for (const r of ripples) { ctx.strokeStyle = r.c.replace(/[\d.]+\)$/, (1 - r.t / 1.4).toFixed(2) + ')'); ctx.lineWidth = .8; ctx.beginPath(); ctx.arc(r.x, r.y, 1 + r.t * 9, 0, 7); ctx.stroke(); }
+      // belts: arrows + items
+      const off = (t * 9) % 6;
+      for (const b of belts) { const x = b.x * T, y = b.y * T; if (!inV(x, y, 6)) continue; ctx.fillStyle = '#d7b64b'; const o = (b.d === 0 || b.d === 1) ? off : 6 - off; if (b.d % 2 === 0) ctx.fillRect(x + o - 1, y + 2, 1, 2); else ctx.fillRect(x + 2, y + o - 1, 2, 1); }
+      for (const p of paths) { for (const it of p.items) { const i = (it.s / T) | 0; const tile = p.tiles[Math.min(i, p.tiles.length - 1)]; const u = it.s - i * T; const x = tile.x * T + (tile.d === 0 ? u : tile.d === 2 ? T - u : 2), y = tile.y * T + (tile.d === 1 ? u : tile.d === 3 ? T - u : 2); if (!inV(x, y, 4)) continue; ctx.fillStyle = it.c; ctx.fillRect(x, y, 2, 2); ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(x, y, 1, 1); } }
+      // inserters: two-phase swing, item visible on the carrying half, idle when jammed / no train
+      for (const it of ins) { const x = it.x * T + 3, y = it.y * T + 3; if (!inV(x, y, 8)) continue; const jammed = (jam.path && it.p === jam.path) || (it.st && !it.st.busy); let ph; if (jammed) ph = -1; else { const w = (t * (it.fast ? 2.2 : 1.4) + it.ph) % 2; ph = w < 1 ? -Math.cos(w * Math.PI) : Math.cos((w - 1) * Math.PI); } const carrying = !jammed && ((t * (it.fast ? 2.2 : 1.4) + it.ph) % 2) < 1; const d = DIR[it.d]; const ex = x + d[0] * ph * 4.5, ey = y + d[1] * ph * 4.5; ctx.strokeStyle = it.fast ? '#3a7bd5' : '#d9a23a'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke(); ctx.fillStyle = '#e8e8e8'; ctx.fillRect(ex - 1, ey - 1, 2, 2); if (carrying) { ctx.fillStyle = it.c; ctx.fillRect(ex - 1, ey - 1, 2, 2); } }
+      // furnaces: glow, sparks, chimney puffs
+      for (const f of furn) { const x = f.x * T, y = f.y * T; if (!inV(x, y, 12)) continue; const starved = jam.path && jam.path.name === 'B-1'; const a = starved ? .2 : .55 + Math.sin(t * 6 + f.ph) * .25; ctx.fillStyle = 'rgba(255,140,40,' + a.toFixed(2) + ')'; ctx.fillRect(x + 3, y + 6, 6, 4); if (!starved && hash((t * 12) | 0, f.x, 3) > .7) { ctx.fillStyle = '#ffe3a0'; ctx.fillRect(x + 4 + ((t * 20 + f.ph) % 4 | 0), y + 5, 1, 1); } if (!starved && rnd() < .06) embers.push({ x: x + 5 + rnd() * 2, y: y + 6, vx: rnd() * 4 - 2, vy: -8 - rnd() * 6, t: 0, life: .6 + rnd() * .4, c: '#ffb347' }); if (!starved && rnd() < .05) puff(x + 6, y + 1, { vx: 2, vy: -3, life: 2.5, r: .9 }); }
+      for (const e of embers) { ctx.fillStyle = e.c; ctx.globalAlpha = 1 - e.t / e.life; ctx.fillRect(e.x, e.y, 1, 1); } ctx.globalAlpha = 1;
+      // boilers + engines
+      for (const b of boilers) { const x = b.x * T, y = b.y * T; if (!inV(x, y, 12)) continue; ctx.fillStyle = 'rgba(255,120,30,' + (.5 + Math.sin(t * 5 + b.x) * .2).toFixed(2) + ')'; ctx.fillRect(x + 6, y + 6, 6, 4); ctx.fillStyle = 'rgba(255,220,120,' + (.4 + Math.sin(t * 13 + b.x * 2) * .3).toFixed(2) + ')'; ctx.fillRect(x + 8, y + 7, 2, 2); }
+      for (const e of engines) { const x = e.x * T, y = e.y * T; if (!inV(x, y, 30)) continue; const p = (Math.sin(t * 7 + e.ph) + 1) / 2; ctx.fillStyle = '#b9bec4'; ctx.fillRect(x + 4 + p * 14, y + 7, 6, 4); ctx.fillStyle = '#2b2e32'; ctx.fillRect(x + 4 + p * 14 + 2, y + 8, 2, 2); const a = t * 7 + e.ph; ctx.strokeStyle = '#2b2e32'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x + 26 - Math.cos(a) * 2.5, y + 9 - Math.sin(a) * 2.5); ctx.lineTo(x + 26 + Math.cos(a) * 2.5, y + 9 + Math.sin(a) * 2.5); ctx.stroke(); }
+      // drills, assemblers, pumpjacks, chem, labs, accumulators, solar glint, roboport
+      for (const d of drills) { const x = d.x * T + 9, y = d.y * T + 9; if (!inV(x, y, 12)) continue; const a = t * 5 + d.ph; ctx.strokeStyle = '#d7b64b'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x - Math.cos(a) * 3, y - Math.sin(a) * 3); ctx.lineTo(x + Math.cos(a) * 3, y + Math.sin(a) * 3); ctx.moveTo(x - Math.cos(a + 1.57) * 3, y - Math.sin(a + 1.57) * 3); ctx.lineTo(x + Math.cos(a + 1.57) * 3, y + Math.sin(a + 1.57) * 3); ctx.stroke(); if (rnd() < .02) puff(x + rnd() * 8 - 4, y + 6, { vx: 1, vy: -1.5, life: 1.2, r: .8, dust: true }); }
+      for (const a of asm) { const x = a.x * T + 9, y = a.y * T + 9; if (!inV(x, y, 12)) continue; const an = t * 3 + a.ph; ctx.fillStyle = '#9fb0c4'; for (let k = 0; k < 4; k++) ctx.fillRect(x + Math.cos(an + k * 1.57) * 2.2 - .5, y + Math.sin(an + k * 1.57) * 2.2 - .5, 1.2, 1.2); if (a.blink > 0) { ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fillRect(x - 8, y - 8, 16, 2); } }
+      for (const pj of pumpjacks) { const x = pj.x * T + 9, y = pj.y * T + 6; if (!inV(x, y, 14)) continue; const a = Math.sin(pj.ph) * .5; ctx.strokeStyle = '#8f949a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 7, y + 4 + a * 4); ctx.lineTo(x + 7, y + 4 - a * 4); ctx.stroke(); ctx.fillStyle = '#d9a23a'; ctx.fillRect(x + 6, y + 2 - a * 4, 3, 3); ctx.strokeStyle = '#555'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - 7, y + 4 + a * 4); ctx.lineTo(x - 7, y + 10); ctx.stroke(); }
+      for (const c of chem) { const x = c.x * T, y = c.y * T; if (!inV(x, y, 18)) continue; ctx.fillStyle = 'rgba(120,220,120,' + (.35 + Math.sin(t * 4 + c.ph) * .2).toFixed(2) + ')'; ctx.fillRect(x + 5, y + 5, 8, 8); ctx.fillStyle = 'rgba(200,255,200,.6)'; ctx.fillRect(x + 6 + ((t * 6 + c.ph) % 6 | 0), y + 6, 1, 1); }
+      { const c = chim[chim.length - 3]; if (c && c.flare && inV(c.x, c.y, 10)) { const fl = 2 + Math.sin(t * 25) * 1 + Math.sin(t * 7) * .6; ctx.fillStyle = 'rgba(255,160,50,.8)'; ctx.beginPath(); ctx.moveTo(c.x - 1.5, c.y); ctx.lineTo(c.x, c.y - fl * 2); ctx.lineTo(c.x + 1.5, c.y); ctx.fill(); ctx.fillStyle = '#fff1b0'; ctx.fillRect(c.x - .5, c.y - fl, 1, fl); } }
+      for (const l of labs) { const x = l.x * T, y = l.y * T; if (!inV(x, y, 18)) continue; const cols = ['#d8463c', '#3fa34d', '#3a7bd5', '#8e44ad', '#f0b054']; for (let k = 0; k < 4; k++) { const ph = l.ph + k * 1.57; const px = x + 9 + Math.cos(ph) * 4, py = y + 9 + Math.sin(ph) * 2.5; ctx.fillStyle = cols[(k + l.x) % 5]; ctx.fillRect(px - 1, py - 2, 2, 4); } }
+      for (const a of accs) { const x = a.x * T, y = a.y * T; if (!inV(x, y, 12)) continue; ctx.fillStyle = '#2d3338'; ctx.fillRect(x + 3, y + 3, 6, 6); ctx.fillStyle = power.acc > .3 ? '#4fb3ff' : '#ff6a3a'; const lvl = power.acc * 6 + (night > .5 ? Math.sin(t * 4 + a.x) * .3 : 0); ctx.fillRect(x + 3, y + 9 - lvl, 6, lvl); }
+      if (night < .5) { const band = ((t * 30) % 300) - 60; ctx.fillStyle = 'rgba(255,255,255,.12)'; for (const s of solars) { const x = s.x * T, y = s.y * T; if (!inV(x, y, 20)) continue; const dxb = (x - 114 * T) + (y - 34 * T) - band; if (dxb > -8 && dxb < 8) ctx.fillRect(x + 1, y + 1, 16, 16); } }
+      { const x = roboport.x * T, y = roboport.y * T; if (inV(x, y, 30)) { const on = ((t * 2) | 0) % 2; ctx.fillStyle = on ? '#4fb3ff' : '#1f3a55'; ctx.fillRect(x + 5, y + 16, 2, 2); ctx.fillStyle = on ? '#1f3a55' : '#4fb3ff'; ctx.fillRect(x + 17, y + 16, 2, 2); ctx.fillStyle = 'rgba(79,179,255,' + (.4 + Math.sin(t * 5) * .3).toFixed(2) + ')'; ctx.fillRect(x + 11, y + 2, 2, 2); } }
+      // signals
+      for (const sg of signals) { if (!inV(sg.x, sg.y, 6)) continue; ctx.fillStyle = sg.red ? '#ff3b2e' : '#3ddc5a'; ctx.fillRect(sg.x, sg.y, 1.5, 1.5); }
+      // trains with cargo
+      for (const tr of trains) { let s = tr.s; for (let i = 0; i < tr.cars.length; i++) { const k = tr.cars[i], len = carLen(k); const c = posAt(tr.ln, s - tr.dir * (len / 2)); if (inV(c.x, c.y, 20)) { ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.ang + (tr.dir < 0 ? Math.PI : 0)); if (k === 'loco') { ctx.fillStyle = '#8a3c32'; ctx.fillRect(-6.5, -2.5, 13, 5); ctx.fillStyle = '#b05042'; ctx.fillRect(-6.5, -2.5, 13, 2); ctx.fillStyle = '#2a2a2a'; ctx.fillRect(4, -2, 2.5, 4); ctx.fillStyle = '#ffe8a0'; ctx.fillRect(6, -2, 1, 1); ctx.fillRect(6, 1, 1, 1); ctx.fillStyle = '#3a3a3a'; ctx.fillRect(-5, -1, 2, 2); } else if (k === 'fluid') { ctx.fillStyle = '#7e8a92'; ctx.fillRect(-6, -2.5, 12, 5); ctx.fillStyle = '#a8b3bb'; ctx.fillRect(-5, -1.5, 10, 2); ctx.fillStyle = '#3a3f44'; ctx.fillRect(-1, -2.5, 2, 5); } else { ctx.fillStyle = '#6e7378'; ctx.fillRect(-6, -2.5, 12, 5); ctx.fillStyle = '#4b5054'; ctx.fillRect(-6, -.5, 12, 1); ctx.fillStyle = tr.cargo; const full = tr.wait > 0 ? (tr.wait / 4.5) : 1; for (let q = 0; q < 3; q++) if (q < full * 3) ctx.fillRect(-4 + q * 3, -1.5, 2, 3); ctx.fillStyle = '#8b9196'; ctx.fillRect(-5, -2, 1, 4); ctx.fillRect(4, -2, 1, 4); } ctx.restore(); } s -= tr.dir * (len + 1); } }
+      // car
+      { if (inV(car.x, car.y, 10)) { ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(car.x - 3, car.y - 1, 7, 4); ctx.fillStyle = '#b8862e'; ctx.fillRect(car.x - 3.5, car.y - 2, 7, 4); ctx.fillStyle = '#2b2e32'; ctx.fillRect(car.x - 1.5 + car.dir * 1, car.y - 1.5, 3, 3); ctx.fillStyle = '#ffe8a0'; ctx.fillRect(car.x + car.dir * 3, car.y - 2, 1, 1); ctx.fillRect(car.x + car.dir * 3, car.y + 1, 1, 1); if (car.state === 'drive' && rnd() < .3) puff(car.x - car.dir * 4, car.y + 1, { vx: -car.dir * 3, vy: -1, life: .8, r: .6, dust: true }); } }
+      // bots (with shadows)
+      for (const b of bots) { if (!inV(b.x, b.y, 6)) continue; const bob = Math.sin(b.ph) * .6; ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(b.x + 1.5, b.y + 3, 2.5, 1.5); ctx.fillStyle = '#e8c23a'; ctx.fillRect(b.x - 1, b.y - 1 + bob, 2.5, 2.5); if (b.item) { ctx.fillStyle = b.item; ctx.fillRect(b.x - .5, b.y + 1.8 + bob, 1.6, 1.6); } }
+      for (const b of cbots) { if (!inV(b.x, b.y, 6)) continue; ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(b.x + 1.5, b.y + 3, 2.5, 1.5); ctx.fillStyle = b.mode === 'decon' ? '#e85a4a' : '#4fb3ff'; ctx.fillRect(b.x - 1, b.y - 1, 2.5, 2.5); if (b.hover > 0) { ctx.strokeStyle = 'rgba(120,200,255,.7)'; ctx.lineWidth = .8; ctx.beginPath(); ctx.arc(b.x, b.y, 3 + Math.sin(t * 12) * 1, 0, 7); ctx.stroke(); ctx.strokeStyle = 'rgba(120,200,255,.9)'; ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x + Math.cos(t * 20) * 3, b.y + 4 + Math.sin(t * 20) * 1.5); ctx.stroke(); } }
+      if (lot.phase === 'ghost' || lot.phase === 'build') { ctx.strokeStyle = 'rgba(90,170,255,.85)'; ctx.lineWidth = .8; ctx.setLineDash([2, 1.5]); ctx.lineDashOffset = -t * 6; for (const e of lot.ents) { if (e.built) continue; const w = e.k === 'asm' ? 3 : e.k === 'belt' ? e.len : 1, h = e.k === 'asm' ? 3 : 1; ctx.fillStyle = 'rgba(90,170,255,.18)'; ctx.fillRect(e.x * T + .5, e.y * T + .5, w * T - 1, h * T - 1); ctx.strokeRect(e.x * T + .5, e.y * T + .5, w * T - 1, h * T - 1); } ctx.setLineDash([]); ctx.lineDashOffset = 0; }
+      if (lot.phase === 'decon') { ctx.strokeStyle = 'rgba(255,90,70,.8)'; ctx.lineWidth = .8; for (const e of lot.ents) { if (!e.built) continue; const w = e.k === 'asm' ? 3 : e.k === 'belt' ? e.len : 1, h = e.k === 'asm' ? 3 : 1; ctx.beginPath(); ctx.moveTo(e.x * T, e.y * T); ctx.lineTo((e.x + w) * T, (e.y + h) * T); ctx.moveTo((e.x + w) * T, e.y * T); ctx.lineTo(e.x * T, (e.y + h) * T); ctx.stroke(); } }
+      for (const f of flashes) { ctx.fillStyle = f.red ? 'rgba(255,80,60,' + (f.t * 2).toFixed(2) + ')' : 'rgba(255,255,255,' + (f.t * 2).toFixed(2) + ')'; ctx.fillRect(f.x - 5, f.y - 5, 10, 10); }
+      for (const w of walls) { if (!w.dmg) continue; ctx.fillStyle = '#3a2a24'; ctx.fillRect(w.x * T + 1, w.y * T + 1, 2, 2); ctx.fillRect(w.x * T + 3, w.y * T + 3, 2, 1); if (w.dmg > 1) ctx.fillRect(w.x * T + 4, w.y * T + 1, 1, 2); }
+      // corpses, splats, nest, biters, turrets, tracers
+      for (const c of corpses) { ctx.fillStyle = 'rgba(70,30,30,' + (Math.max(0, 1 - c.t / 30) * .8).toFixed(2) + ')'; ctx.fillRect(c.x - 2, c.y - 1, c.big ? 5 : 4, 3); }
+      for (const s of splats) { ctx.fillStyle = s.c; ctx.fillRect(s.x, s.y, 1.2, 1.2); }
+      for (const sp of spawners) { if (!inV(sp.x, sp.y, 20)) continue; const k = sp.pulse || 1; ctx.fillStyle = 'rgba(230,150,160,.35)'; ctx.beginPath(); ctx.ellipse(sp.x - 2, sp.y - 2, 9 * k, 7 * k, 0, 0, 7); ctx.fill(); }
+      for (const w of worms) { if (!inV(w.x, w.y, 10)) continue; const a = Math.sin(t * 2 + w.ph); ctx.fillStyle = '#d58a7a'; ctx.fillRect(w.x - 1 + a * 2, w.y - 7 - Math.abs(a) * 2, 3, 5); ctx.fillStyle = '#5a2a30'; ctx.fillRect(w.x - .5 + a * 2, w.y - 7 - Math.abs(a) * 2, 2, 1); }
+      for (const b of biters) { if (!inV(b.x, b.y, 8)) continue; const sz = b.big ? 6 : 4; const l = Math.sin(b.ph) * 2; ctx.strokeStyle = b.big ? '#2b3350' : '#4a2a30'; ctx.lineWidth = .9; ctx.beginPath(); for (const s of [-1, 1]) { ctx.moveTo(b.x, b.y - 1); ctx.lineTo(b.x + s * (sz / 2 + 2), b.y - 2 + l * s); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x + s * (sz / 2 + 2.5), b.y + .5 - l * s); ctx.moveTo(b.x, b.y + 1); ctx.lineTo(b.x + s * (sz / 2 + 2), b.y + 2.5 + l * s); } ctx.stroke(); ctx.fillStyle = b.big ? '#6f7fb8' : '#c47a86'; ctx.beginPath(); ctx.ellipse(b.x, b.y, sz / 2, sz / 2 * .8, 0, 0, 7); ctx.fill(); ctx.fillStyle = b.big ? '#a3afd8' : '#e8a8b0'; ctx.fillRect(b.x - sz / 4, b.y - sz / 2 + .5, sz / 2, 1); ctx.fillStyle = '#2a1a1a'; ctx.fillRect(b.x + (b.idle ? sz / 2 - 1 : -sz / 2 - .5), b.y - .5, 1.5, 1); }
+      for (const tu of turrets) { const cx = tu.x * T + 6, cy = tu.y * T + 6; if (!inV(cx, cy, 10)) continue; ctx.fillStyle = '#8a9095'; ctx.beginPath(); ctx.arc(cx, cy, 3, 0, 7); ctx.fill(); const bl = 6 - tu.recoil; ctx.strokeStyle = '#2d3034'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(tu.ang) * bl, cy + Math.sin(tu.ang) * bl); ctx.stroke(); if (tu.flash > 0) { ctx.fillStyle = '#fff3b0'; ctx.fillRect(cx + Math.cos(tu.ang) * 6 - 1, cy + Math.sin(tu.ang) * 6 - 1, 2.5, 2.5); } }
+      for (const tr of tracers) { ctx.strokeStyle = tr.laser ? 'rgba(120,200,255,.95)' : 'rgba(255,230,140,.9)'; ctx.lineWidth = tr.laser ? 1 : .6; ctx.beginPath(); ctx.moveTo(tr.x1, tr.y1); ctx.lineTo(tr.x2, tr.y2); ctx.stroke(); }
+      // spidertron (stepping feet)
+      { const s = spider; if (inV(s.x, s.y, 20)) { ctx.strokeStyle = '#2f3a2f'; ctx.lineWidth = .9; for (const f of s.feet) { const kx = (s.x + f.x) / 2 + Math.cos(f.a) * 3, ky = (s.y + f.y) / 2 - 4 - (f.lift || 0) * 15; ctx.beginPath(); ctx.moveTo(s.x, s.y - 2); ctx.lineTo(kx, ky); ctx.lineTo(f.x, f.y - (f.lift || 0) * 8); ctx.stroke(); } ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(s.x - 3, s.y + 2, 7, 2); ctx.fillStyle = '#3d4f3b'; ctx.fillRect(s.x - 3, s.y - 5, 6, 6); ctx.fillStyle = '#9ad1ff'; ctx.fillRect(s.x - 2, s.y - 4, 1, 1); ctx.fillRect(s.x + 1, s.y - 4, 1, 1); ctx.fillStyle = '#e0b73a'; ctx.fillRect(s.x - 1, s.y - 1, 2, 1); } }
+      // radar
+      { const x = radar.x * T + 9, y = radar.y * T + 7; if (inV(x, y, 110)) { ctx.strokeStyle = '#cfd4d8'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(radar.ang) * 5, y + Math.sin(radar.ang) * 3); ctx.stroke(); ctx.fillStyle = 'rgba(120,230,160,.08)'; ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, 40, radar.ang - .4, radar.ang); ctx.fill(); if (radar.sweep > 0) { const p = 1 - radar.sweep / 2.2; ctx.strokeStyle = 'rgba(120,230,160,' + ((1 - p) * .6).toFixed(2) + ')'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, p * 110, 0, 7); ctx.stroke(); } } }
+      // silo, rocket, cargo pod
+      { const x = silo.x * T + 27, y = silo.y * T + 27; if (inV(x, y, 700)) { const open = silo.phase === 'ready' ? Math.min(1, silo.t / 3) : silo.phase === 'launch' || silo.phase === 'gone' ? 1 : 0; ctx.fillStyle = '#1a1d20'; ctx.fillRect(x - 9, y - 21, 18 * open, 42); ctx.fillStyle = '#5a6066'; ctx.fillRect(x - 9 + 18 * open, y - 21, 18 * (1 - open), 42); if (silo.phase === 'build') { ctx.fillStyle = '#2b2f33'; ctx.fillRect(x - 12, y + 24, 24, 2); ctx.fillStyle = '#3fa34d'; ctx.fillRect(x - 12, y + 24, 24 * silo.parts / 100, 2); } if (silo.phase === 'ready') { const on = ((silo.t * 2) | 0) % 2; ctx.fillStyle = on ? '#ff4a3a' : '#5a1a14'; for (const o of [[-24, -24], [24, -24], [-24, 24], [24, 24]]) ctx.fillRect(x + o[0] - 1, y + o[1] - 1, 2, 2); } if (silo.phase === 'ready' || silo.phase === 'launch') { const ry = silo.phase === 'launch' ? y - silo.p * silo.p * 520 : y; const fl = silo.phase === 'launch' ? 10 + Math.sin(t * 40) * 3 : silo.t > 8 ? 3 + Math.sin(t * 40) : 0; if (fl) { ctx.fillStyle = 'rgba(255,150,40,.35)'; ctx.beginPath(); ctx.ellipse(x, ry + 12, 4, fl, 0, 0, 7); ctx.fill(); ctx.fillStyle = '#ff7a1e'; ctx.beginPath(); ctx.moveTo(x - 2, ry + 11); ctx.lineTo(x, ry + 11 + fl); ctx.lineTo(x + 2, ry + 11); ctx.fill(); ctx.fillStyle = '#fff1b0'; ctx.beginPath(); ctx.moveTo(x - 1, ry + 11); ctx.lineTo(x, ry + 11 + fl * .5); ctx.lineTo(x + 1, ry + 11); ctx.fill(); } ctx.fillStyle = '#dfe3e6'; ctx.fillRect(x - 2.5, ry - 11, 5, 22); ctx.fillStyle = '#f4f7f8'; ctx.fillRect(x - 2.5, ry - 11, 2, 22); ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.moveTo(x - 3, ry - 11); ctx.lineTo(x, ry - 17); ctx.lineTo(x + 3, ry - 11); ctx.fill(); ctx.fillRect(x - 4, ry + 8, 2, 4); ctx.fillRect(x + 2, ry + 8, 2, 4); } if (silo.pod && !silo.pod.landed) { const p = silo.pod; ctx.strokeStyle = '#f4f7f8'; ctx.lineWidth = .8; ctx.beginPath(); ctx.arc(p.x, p.y - 7, 6, Math.PI, 0); ctx.stroke(); ctx.beginPath(); ctx.moveTo(p.x - 6, p.y - 7); ctx.lineTo(p.x, p.y); ctx.lineTo(p.x + 6, p.y - 7); ctx.stroke(); ctx.fillStyle = '#dfe3e6'; ctx.fillRect(p.x - 1.5, p.y - 1, 3, 3); ctx.fillStyle = '#c0392b'; ctx.fillRect(p.x - 1.5, p.y - 1, 3, 1); } else if (silo.pod && silo.pod.landed) { ctx.fillStyle = '#dfe3e6'; ctx.fillRect(silo.pod.x - 1.5, silo.pod.y - 1, 3, 3); ctx.fillStyle = 'rgba(244,247,248,.7)'; ctx.fillRect(silo.pod.x + 2, silo.pod.y - 2, 6, 3); } } }
+      // smoke / pollution
+      for (const s of smoke) { if (!inV(s.x, s.y, 20)) continue; const k = s.a / s.life; const al = (k < .2 ? k * 5 : 1 - (k - .2) / .8) * (s.tint ? .28 : s.dark ? .3 : s.dust ? .25 : .22); ctx.fillStyle = s.tint ? 'rgba(170,190,150,' + al.toFixed(3) + ')' : s.dark ? 'rgba(60,60,60,' + al.toFixed(3) + ')' : s.dust ? 'rgba(150,130,100,' + al.toFixed(3) + ')' : 'rgba(205,205,198,' + al.toFixed(3) + ')'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill(); }
+      if (raid.pollution > .3) { const a = Math.min(.22, (raid.pollution - .3) * .2); const px = 100 * T + raid.pollution * 50 * T, py = 100 * T; const gr = ctx.createRadialGradient(px, py, 10, px, py, 120 * T); gr.addColorStop(0, 'rgba(150,140,120,' + a.toFixed(3) + ')'); gr.addColorStop(1, 'rgba(150,140,120,0)'); ctx.fillStyle = gr; ctx.fillRect(vx0, vy0, vx1 - vx0, vy1 - vy0); }
+    }
+    function drawLights(night, vx0, vy0, vx1, vy1) {
+      if (night <= 0) return;
+      const inV = (x, y, m) => x > vx0 - m && x < vx1 + m && y > vy0 - m && y < vy1 + m;
+      ctx.globalCompositeOperation = 'lighter';
+      const dim = power.sat, on = clamp((night - .25) * 3, 0, 1);
+      for (const l of lamps) { const x = l.x * T + 3, y = l.y * T + 3; if (!inV(x, y, 40)) continue; let k = on; if (on > 0 && on < 1) k = on * (hash(l.k, (t * 18) | 0, 5) > .35 ? 1 : .15); ctx.globalAlpha = k * dim; if (k <= 0) continue; ctx.drawImage(GLOW, x - 30, y - 30, 60, 60); ctx.fillStyle = '#fff2c8'; ctx.fillRect(x - 1, y - 2, 2, 2); }
+      for (const f of furn) { const x = f.x * T + 6, y = f.y * T + 8; if (!inV(x, y, 30)) continue; ctx.globalAlpha = night * .5; ctx.drawImage(GLOW, x - 14, y - 14, 28, 28); }
+      for (const b of boilers) { const x = b.x * T + 9, y = b.y * T + 8; if (!inV(x, y, 30)) continue; ctx.globalAlpha = night * .4; ctx.drawImage(GLOW, x - 12, y - 12, 24, 24); }
+      ctx.globalAlpha = night * .8;
+      if (silo.phase === 'ready' || silo.phase === 'launch') { const x = silo.x * T + 27, y = silo.y * T + 27; for (const o of [[-33, -33], [33, -33], [-33, 33], [33, 33]]) ctx.drawImage(GLOW, x + o[0] - 40, y + o[1] - 40, 80, 80); if (silo.phase === 'launch') { ctx.globalAlpha = night; ctx.drawImage(GLOW, x - 60, y - silo.p * silo.p * 520 - 40, 120, 120); } }
+      for (const tr of trains) { const h = posAt(tr.ln, tr.s); if (!inV(h.x, h.y, 40)) continue; ctx.globalAlpha = night * .55; ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(h.ang + (tr.dir < 0 ? Math.PI : 0)); const gr = ctx.createLinearGradient(0, 0, 36, 0); gr.addColorStop(0, 'rgba(255,240,190,.55)'); gr.addColorStop(1, 'rgba(255,240,190,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(4, -2); ctx.lineTo(36, -12); ctx.lineTo(36, 12); ctx.lineTo(4, 2); ctx.fill(); ctx.restore(); }
+      if (car.state === 'drive' && inV(car.x, car.y, 40)) { ctx.globalAlpha = night * .5; const gr = ctx.createLinearGradient(car.x, 0, car.x + car.dir * 26, 0); gr.addColorStop(0, 'rgba(255,240,190,.5)'); gr.addColorStop(1, 'rgba(255,240,190,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(car.x + car.dir * 3, car.y - 2); ctx.lineTo(car.x + car.dir * 26, car.y - 8); ctx.lineTo(car.x + car.dir * 26, car.y + 8); ctx.lineTo(car.x + car.dir * 3, car.y + 2); ctx.fill(); }
+      for (const tu of turrets) if (tu.flash > 0) { const cx = tu.x * T + 6, cy = tu.y * T + 6; ctx.globalAlpha = night * .9; ctx.drawImage(GLOW, cx - 12, cy - 12, 24, 24); }
+      for (const tr of tracers) if (tr.laser) { ctx.globalAlpha = night * .7; ctx.drawImage(GLOW, tr.x2 - 8, tr.y2 - 8, 16, 16); }
+      ctx.globalAlpha = night * .6; for (const c of chem) ctx.drawImage(GLOW, c.x * T - 6, c.y * T - 6, 30, 30);
+      { const c = chim[chim.length - 3]; if (c && c.flare) { ctx.globalAlpha = night * (.5 + Math.sin(t * 25) * .2); ctx.drawImage(GLOW, c.x - 12, c.y - 16, 24, 24); } }
+      ctx.globalAlpha = night * .35; ctx.drawImage(GLOW, spider.x - 8, spider.y - 10, 16, 16);
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    }
+    function drawRain() {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = 'rgba(20,40,70,.18)'; ctx.fillRect(0, 0, cssW, cssH);
+      ctx.strokeStyle = 'rgba(200,220,240,.28)'; ctx.lineWidth = 1; ctx.beginPath();
+      const n = Math.min(260, (cssW * cssH / 4200) | 0);
+      for (let i = 0; i < n; i++) { const x = (hash(i, 7, 2) * cssW + (t * 60 * (1 + hash(i, 1, 2)))) % (cssW + 40) - 20, y = (hash(i, 9, 3) * cssH + t * (420 + hash(i, 3, 4) * 220)) % (cssH + 40) - 20; ctx.moveTo(x, y); ctx.lineTo(x - 2, y + 9); }
+      ctx.stroke();
+      if (lightning > 0) { ctx.fillStyle = 'rgba(220,230,255,' + (lightning * .45).toFixed(2) + ')'; ctx.fillRect(0, 0, cssW, cssH); }
+    }
+
+    // ---------- geo readout (central Seattle: the world is ~4.5 km × 2.6 km around downtown) ----------
+    let geoT = 0;
+    const geo = () => { const lat = 47.6062 - (cam.y - HPX / 2) / HPX * .026, lon = 122.3321 - (cam.x - WPX / 2) / WPX * .055; return lat.toFixed(4) + '° N · ' + lon.toFixed(4) + '° W · ' + (Number(this.prop('zoom', 2.4)) * (1 + cam.zb)).toFixed(1) + '×'; };
+
+    // ---------- frame ----------
+    let statT = 0, bootLogged = false;
+    const step = (dt, vw, vh) => { simBelts(dt); simSmoke(dt); simTrains(dt); simBots(dt); simLot(dt); simRaid(dt); simSilo(dt); simMisc(dt); simCam(dt, vw, vh); flushQueue(dt); };
+    const frame = (now) => {
+      if (self.dead) return;
+      const still = !!self.prop('still', false);
+      if (!still) self.raf = requestAnimationFrame(frame);
+      let dt = Math.min(.1, (now - last) / 1000); last = now; if (document.hidden && !still) return; t += dt;
+      let z = Number(self.prop('zoom', 2.4)) * (1 + cam.zb), vw = cssW / z, vh = cssH / z;
+      if (!bootLogged) { bootLogged = true; emit('# factory simulator run started · seed 0x' + seed.toString(16) + ' · click the map to look around · m to minimize'); if (still) { cam.linger = 999; for (let i = 0; i < 360; i++) { t += .05; step(.05, vw, vh); } } }
+      const night = nightOf(), rain = !!self.prop('rain', false);
+      step(still ? 0 : dt, vw, vh);
+      z = Number(self.prop('zoom', 2.4)) * (1 + cam.zb); vw = cssW / z; vh = cssH / z;
+      const vx0 = cam.x - vw / 2, vy0 = cam.y - vh / 2, vx1 = vx0 + vw, vy1 = vy0 + vh;
+      view = { z, vx0, vy0 };
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#14303c'; ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.imageSmoothingEnabled = false;
+      ctx.setTransform(dpr * z, 0, 0, dpr * z, -vx0 * dpr * z, -vy0 * dpr * z);
+      ctx.drawImage(S, 0, 0);
+      drawDyn(night, vx0, vy0, vx1, vy1);
+      if (night > 0) { ctx.fillStyle = 'rgba(8,14,38,' + (.5 * night).toFixed(2) + ')'; ctx.fillRect(vx0 - 2, vy0 - 2, vw + 4, vh + 4); }
+      else if (rain) { ctx.fillStyle = 'rgba(30,40,60,.12)'; ctx.fillRect(vx0 - 2, vy0 - 2, vw + 4, vh + 4); }
+      drawLights(night, vx0, vy0, vx1, vy1);
+      if (rain) drawRain();
+      geoT += dt; if (geoT > .5) { geoT = 0; if (typeof self.props.onGeo === 'function') self.props.onGeo(geo()); }
+      statT += dt; if (statT > 1) { statT = 0; if (typeof self.props.onStats === 'function') self.props.onStats({ power: Math.round(power.sat * 100), trains: trains.length, bots: bots.length + cbots.length, threats: biters.filter(b => !b.idle).length, science: stats.science, rockets: stats.rockets, repelled: stats.repelled, built: stats.built, parts: Math.round(silo.parts), research: research.names[research.i % research.names.length] + ' ' + Math.round(research.t * 100) + '%' }); }
+    };
+    this.frame = frame;
+    this.raf = requestAnimationFrame(frame);
+  }
+}

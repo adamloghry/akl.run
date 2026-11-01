@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>akl.run — factory mode</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&amp;family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#14303c}
+a{color:#f0b054;text-decoration:none}a:hover{color:#ffd694;text-decoration:underline}
+@keyframes rise{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.rise{animation:rise .6s ease-out backwards}
+.toy{color:#e9ecdc;border-bottom:1px solid rgba(233,236,220,.1)}
+.toy:hover{text-decoration:none;color:#e9ecdc;background:rgba(240,176,84,.06)}
+.toy:hover .nm{color:#ffd694}
+.sl::after{content:"";position:absolute;inset:0}
+.ol{position:relative;z-index:1;color:#c9d2b8;text-decoration:underline;text-decoration-color:rgba(240,176,84,.55);text-underline-offset:2px}
+.ol:hover{color:#ffd694}
+.toy:focus-visible,.sl:focus-visible,.ol:focus-visible,.home:focus-visible,.hud:focus-visible,.fg:focus-visible{outline:2px solid #ffd694;outline-offset:2px}
+.home{display:inline-flex;align-items:center;justify-content:center;color:#b9c4a6;width:32px;height:32px;padding:0;border:1px solid rgba(233,236,220,.16);border-radius:3px}
+.home:hover{color:#ffd694;border-color:rgba(240,176,84,.5);text-decoration:none;background:rgba(240,176,84,.08)}
+.hud:hover,.fg:hover{color:#ffd694;text-decoration:none}
+.px{shape-rendering:crispEdges;image-rendering:pixelated}
+.ds{font-family:Newsreader,Georgia,serif;font-size:15.5px;color:rgb(201,210,184);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:760px){.wrap{padding:20px!important}.win{padding:16px 16px 10px!important}.ds{white-space:normal;font-size:14.5px;line-height:1.35}.ic{width:36px;height:36px}.row{grid-template-columns:36px minmax(0,1fr)!important;gap:14px!important}.logwrap{padding:0 20px!important;bottom:56px!important}.stats{display:none!important}}
+@media (prefers-reduced-motion: reduce){.rise{animation:none}}
+</style>
+</helmet>
+<div style="position: relative; width: 100%; height: 100vh; min-height: 560px; overflow: hidden; background: #14303c; font-family: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace; font-size: 14px; color: #e9ecdc">
+  <div style="position: absolute; inset: 0"><dc-import name="World" mode="{{mode}}" time="{{time}}" rain="{{rain}}" zoom="{{zoom}}" seed="{{seed}}" on-event="{{onEvent}}" on-stats="{{onStats}}" on-geo="{{onGeo}}" hint-size="100%,100%"></dc-import></div>
+
+  <sc-if value="{{isHub}}" hint-placeholder-val="{{false}}">
+  <div class="wrap" style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 40px; pointer-events: none">
+    <main id="windows" class="win rise" style="pointer-events: auto; width: 900px; max-width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 22px 34px 18px; background: rgba(4,9,8,.9); border-radius: 4px; box-shadow: 0 0 0 1px rgba(233,236,220,.08), 0 10px 30px rgba(0,0,0,.45)">
+      <header style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 14px; border-bottom: 1px solid rgba(233,236,220,.18)">
+        <h1 style="margin: 0; font-size: 22px; font-weight: 400; letter-spacing: .02em">akl.run</h1>
+        <a class="home" href="https://akl.dev/" title="akl.dev" aria-label="akl.dev (home)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg></a>
+      </header>
+      <ul role="list" style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column">
+        <li style="position: relative"><div class="toy row" style="display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 18px; align-items: center; padding: 11px 10px; margin: 0 -10px">
+          <svg class="px ic" viewBox="0 0 12 12" width="44" height="44" aria-hidden="true"><rect x="1" y="4" width="10" height="7" fill="#6b625a"></rect><rect x="2" y="5" width="8" height="5" fill="#7a7066"></rect><rect x="4" y="7" width="4" height="2" fill="#ff8c28"></rect><rect x="5" y="7" width="1" height="1" fill="#ffe3a0"></rect><rect x="8" y="1" width="2" height="3" fill="#4a4f55"></rect><rect x="7" y="0" width="1" height="1" fill="#cfcfc8"></rect><rect x="2" y="11" width="8" height="1" fill="#2e2f31"></rect><rect x="3" y="11" width="1" height="1" fill="#d7b64b"></rect><rect x="6" y="11" width="1" height="1" fill="#d7b64b"></rect><rect x="9" y="11" width="1" height="1" fill="#d7b64b"></rect></svg>
+          <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><a class="nm sl" href="#factory" onClick="{{enterFactory}}" title="minimize this window and watch the factory" style="font-size: 16px; font-weight: 700; color: rgb(240, 176, 84)">factory</a><span class="ds">A busy factory in a web page, inspired by <a class="ol" href="https://factorio.com/">Factorio</a>. <i>Press m to minimize this window and watch it run.</i></span></span>
+        </div></li>
+        <li><a class="toy row" href="https://16384.dev/" style="display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 18px; align-items: center; padding: 11px 10px; margin: 0 -10px">
+          <svg class="px ic" viewBox="0 0 12 12" width="44" height="44" aria-hidden="true"><rect x="0" y="1" width="12" height="10" fill="#1f2428"/><rect x="0" y="1" width="12" height="1" fill="#3a4046"/><rect x="1" y="1" width="1" height="1" fill="#6b7378"/><rect x="3" y="1" width="1" height="1" fill="#6b7378"/><rect x="3" y="4" width="1" height="1" fill="#5ad1d1"/><rect x="2" y="5" width="1" height="1" fill="#5ad1d1"/><rect x="1" y="6" width="1" height="1" fill="#5ad1d1"/><rect x="2" y="7" width="1" height="1" fill="#5ad1d1"/><rect x="3" y="8" width="1" height="1" fill="#5ad1d1"/><rect x="7" y="3" width="1" height="1" fill="#e9ecdc"/><rect x="6" y="4" width="1" height="2" fill="#e9ecdc"/><rect x="5" y="6" width="1" height="2" fill="#e9ecdc"/><rect x="4" y="8" width="1" height="1" fill="#e9ecdc"/><rect x="8" y="4" width="1" height="1" fill="#5ad1d1"/><rect x="9" y="5" width="1" height="1" fill="#5ad1d1"/><rect x="10" y="6" width="1" height="1" fill="#5ad1d1"/><rect x="9" y="7" width="1" height="1" fill="#5ad1d1"/><rect x="8" y="8" width="1" height="1" fill="#5ad1d1"/><rect x="5" y="10" width="2" height="1" fill="#3fa34d"/></svg>
+          <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="nm" style="font-size: 16px; font-weight: 700; color: rgb(240, 176, 84)">16384.dev</span><span class="ds">Source code behind various projects, including this website and others.</span></span>
+        </a></li>
+        <li><a class="toy row" href="https://rarp.org/" style="display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 18px; align-items: center; padding: 11px 10px; margin: 0 -10px">
+          <svg class="px ic" viewBox="0 0 12 12" width="44" height="44" aria-hidden="true"><rect x="2" y="1" width="7" height="10" fill="#dfe3e6"></rect><rect x="9" y="3" width="1" height="8" fill="#dfe3e6"></rect><rect x="8" y="1" width="1" height="2" fill="#9aa3ab"></rect><rect x="9" y="2" width="1" height="1" fill="#9aa3ab"></rect><rect x="3" y="3" width="4" height="1" fill="#6b7378"></rect><rect x="3" y="5" width="5" height="1" fill="#6b7378"></rect><rect x="3" y="7" width="3" height="1" fill="#6b7378"></rect><rect x="3" y="9" width="5" height="1" fill="#c67f50"></rect></svg>
+          <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="nm" style="font-size: 16px; font-weight: 700; color: rgb(240, 176, 84)">rarp.org</span><span class="ds">RFCs are cool, more engineers should read them. This is ~all of them, with ISO Plain Language variants.</span></span>
+        </a></li>
+        <li><a class="toy row" href="https://enchilada.dev/" style="display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 18px; align-items: center; padding: 11px 10px; margin: 0 -10px">
+          <svg class="px ic" viewBox="0 0 12 12" width="44" height="44" aria-hidden="true"><rect x="0" y="9" width="12" height="2" fill="#dfe3e6"/><rect x="1" y="11" width="10" height="1" fill="#9aa3ab"/><rect x="1" y="5" width="10" height="4" fill="#d9a96a"/><rect x="1" y="5" width="1" height="4" fill="#b8864a"/><rect x="10" y="5" width="1" height="4" fill="#b8864a"/><rect x="2" y="8" width="8" height="1" fill="#b8864a"/><rect x="2" y="4" width="8" height="2" fill="#b23a2a"/><rect x="3" y="6" width="1" height="1" fill="#b23a2a"/><rect x="7" y="6" width="1" height="1" fill="#b23a2a"/><rect x="9" y="6" width="1" height="1" fill="#b23a2a"/><rect x="4" y="4" width="1" height="1" fill="#f4d67a"/><rect x="8" y="4" width="1" height="1" fill="#f4d67a"/><rect x="6" y="5" width="1" height="1" fill="#f4d67a"/><rect x="5" y="3" width="1" height="1" fill="#3fa34d"/><rect x="2" y="3" width="1" height="1" fill="#3fa34d"/><rect x="3" y="1" width="1" height="1" fill="#cfcfc8" opacity=".55"/><rect x="8" y="0" width="1" height="2" fill="#cfcfc8" opacity=".4"/></svg>
+          <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="nm" style="font-size: 16px; font-weight: 700; color: rgb(240, 176, 84)">enchilada.dev</span><span class="ds">I have been trying to make an end-to-end agentic software factory, with varying degrees of success.</span></span>
+        </a></li>
+        <li><a class="toy row" href="https://16384.dev/hollow" style="display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 18px; align-items: center; padding: 11px 10px; margin: 0 -10px">
+          <svg class="px ic" viewBox="0 0 12 12" width="44" height="44" aria-hidden="true"><rect x="5" y="1" width="2" height="2" fill="#dfe3e6"></rect><rect x="4" y="3" width="1" height="1" fill="#5ad1d1"></rect><rect x="7" y="3" width="1" height="1" fill="#5ad1d1"></rect><rect x="3" y="4" width="1" height="1" fill="#5ad1d1"></rect><rect x="8" y="4" width="1" height="1" fill="#5ad1d1"></rect><rect x="2" y="5" width="2" height="2" fill="#dfe3e6"></rect><rect x="8" y="5" width="2" height="2" fill="#dfe3e6"></rect><rect x="2" y="7" width="1" height="1" fill="#5ad1d1"></rect><rect x="4" y="7" width="1" height="1" fill="#5ad1d1"></rect><rect x="7" y="7" width="1" height="1" fill="#5ad1d1"></rect><rect x="10" y="7" width="1" height="1" fill="#5ad1d1"></rect><rect x="1" y="8" width="1" height="1" fill="#5ad1d1"></rect><rect x="1" y="9" width="2" height="2" fill="#9aa3ab"></rect><rect x="4" y="9" width="2" height="2" fill="#9aa3ab"></rect><rect x="7" y="9" width="2" height="2" fill="#9aa3ab"></rect><rect x="10" y="9" width="2" height="2" fill="#9aa3ab"></rect></svg>
+          <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="nm" style="font-size: 16px; font-weight: 700; color: rgb(240, 176, 84)">hollow</span><span class="ds">Content-addressed static site generation in Rust &amp; Nix. Every page a Merkle leaf with pure rebuilds.</span></span>
+        </a></li>
+        <li><a class="toy row" href="https://16384.dev/external-memory" style="display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 18px; align-items: center; padding: 11px 10px; margin: 0 -10px">
+          <svg class="px ic" viewBox="0 0 12 12" width="44" height="44" aria-hidden="true"><rect x="1" y="0" width="10" height="12" fill="#141c22"/><rect x="0" y="1" width="12" height="10" fill="#141c22"/><rect x="1" y="2" width="3" height="1" fill="#2a6e78"/><rect x="1" y="2" width="1" height="4" fill="#2a6e78"/><rect x="8" y="9" width="3" height="1" fill="#2a6e78"/><rect x="10" y="6" width="1" height="4" fill="#2a6e78"/><rect x="9" y="1" width="2" height="1" fill="#2a6e78"/><rect x="1" y="10" width="2" height="1" fill="#2a6e78"/><rect x="5" y="1" width="2" height="1" fill="#3fa8b4"/><rect x="4" y="2" width="4" height="4" fill="#3fa8b4"/><rect x="5" y="6" width="2" height="1" fill="#3fa8b4"/><rect x="3" y="7" width="6" height="2" fill="#3fa8b4"/><rect x="2" y="8" width="8" height="2" fill="#2f8691"/><rect x="5" y="3" width="2" height="2" fill="#bff6f6"/><rect x="2" y="5" width="8" height="1" fill="#bff6f6" opacity=".25"/><rect x="8" y="4" width="1" height="1" fill="#e9ecdc"/><rect x="8" y="5" width="1" height="1" fill="#e9ecdc"/><rect x="9" y="4" width="1" height="2" fill="#5ad1d1" opacity=".5"/></svg>
+          <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="nm" style="font-size: 16px; font-weight: 700; color: rgb(240, 176, 84)">external-memory</span><span class="ds">A personal knowledge store: put things in, get them back, clip what matters.</span></span>
+        </a></li>
+        <li><a class="toy row" href="https://eternal-blue.akl.run/" style="display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 18px; align-items: center; padding: 11px 10px; margin: 0 -10px; border-bottom: 0">
+          <svg class="px ic" viewBox="0 0 12 12" width="44" height="44" aria-hidden="true"><rect x="1" y="1" width="10" height="7" fill="#5d9741"></rect><rect x="2" y="8" width="8" height="2" fill="#5d9741"></rect><rect x="3" y="10" width="6" height="1" fill="#5d9741"></rect><rect x="4" y="11" width="4" height="1" fill="#5d9741"></rect><rect x="2" y="2" width="8" height="5" fill="#236192"></rect><rect x="3" y="7" width="6" height="2" fill="#7ab35a"></rect><rect x="5" y="2" width="2" height="1" fill="#ffffff"></rect><rect x="4" y="3" width="4" height="1" fill="#ffffff"></rect><rect x="5" y="4" width="2" height="5" fill="#ffffff"></rect><rect x="4" y="8" width="1" height="1" fill="#ffffff"></rect><rect x="7" y="8" width="1" height="1" fill="#ffffff"></rect></svg>
+          <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span class="nm" style="font-size: 16px; font-weight: 700; color: rgb(240, 176, 84)">eternal-blue</span><span class="ds">Analyzing Seattle Sounders FC across the whole MLS era, on the pitch and in the front office.</span></span>
+        </a></li>
+      </ul>
+    </main>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{isFactory}}" hint-placeholder-val="{{true}}">
+  <a class="fg rise" href="#hub" onClick="{{exitFactory}}" style="position: absolute; left: 28px; top: 24px; padding: 7px 12px; font-size: 12px; letter-spacing: .06em; color: #b9c4a6; background: rgba(3,8,6,.5); border-radius: 4px; box-shadow: 0 0 0 1px rgba(233,236,220,.06); text-shadow: 0 1px 2px rgba(0,0,0,.6)">% fg   ← akl.run</a>
+  <p class="stats rise" style="position: absolute; right: 28px; top: 24px; margin: 0; padding: 7px 12px; font-size: 12px; letter-spacing: .04em; color: #b9c4a6; background: rgba(3,8,6,.5); border-radius: 4px; box-shadow: 0 0 0 1px rgba(233,236,220,.06); display: flex; gap: 1.6ch; text-shadow: 0 1px 2px rgba(0,0,0,.6)"><span>power <span style="color: #e9ecdc">{{stats.power}}%</span></span><span>trains <span style="color: #e9ecdc">{{stats.trains}}</span></span><span>bots <span style="color: #e9ecdc">{{stats.bots}}</span></span><span>threats <span style="color: #e9ecdc">{{stats.threats}}</span></span><span>rockets <span style="color: #e9ecdc">{{stats.rockets}}</span></span><span>research <span style="color: #e9ecdc">{{stats.research}}</span></span></p>
+  <div class="logwrap" style="position: absolute; left: 0; right: 0; bottom: 44px; display: flex; justify-content: center; padding: 0 320px 0 48px; pointer-events: none">
+    <section class="rise" aria-label="factory log" style="pointer-events: auto; width: 820px; max-width: 100%; display: flex; flex-direction: column; gap: 6px; padding: 14px 20px 14px 16px; background: rgba(3,8,6,.5); border-radius: 4px; box-shadow: 0 0 0 1px rgba(233,236,220,.06), 0 10px 30px rgba(0,0,0,.35); text-shadow: 0 1px 2px rgba(0,0,0,.6), 0 0 14px rgba(0,0,0,.45)">
+      <p style="margin: 0; font-size: 13px; color: #b9c4a6">% journalctl -u factory -f</p>
+      <ol aria-live="off" style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px">
+        <li style="padding-left: 2ch; font-size: 13px; color: #8b987b; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"># you should play factorio! → <a href="https://www.youtube.com/watch?v=oF1zCD7NwNY" style="color: #a8b58a">watch the 2026 trailer</a></li>
+        <sc-for list="{{log}}" as="ln" hint-placeholder-count="4">
+          <li style="padding-left: 2ch; font-size: 13px; color: {{ln.color}}; opacity: {{ln.op}}; overflow-wrap: anywhere; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="color: #8b987b">{{ln.stamp}}</span>  {{ln.text}}</li>
+        </sc-for>
+      </ol>
+    </section>
+  </div>
+  </sc-if>
+
+  <button type="button" class="hud rise" onClick="{{toggle}}" aria-controls="windows" aria-pressed="{{pressed}}" aria-label="minimize windows" style="position: absolute; right: 40px; bottom: 37px; z-index: 2; appearance: none; background: none; border: 0; margin: 0; padding: 7px 8px; font: inherit; font-family: inherit; font-size: 12px; letter-spacing: .08em; color: #b9c4a6; cursor: pointer; text-align: right; text-shadow: 0 1px 2px rgba(0,0,0,.7), 0 0 10px rgba(0,0,0,.6)"><span aria-hidden="true">{{geo}}</span></button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mode":{"editor":"enum","options":["hub","factory"],"default":"factory","section":"Page"},"time":{"editor":"enum","options":["day","dusk","night","cycle"],"default":"night","section":"World"},"rain":{"editor":"boolean","default":false,"section":"World"},"zoom":{"editor":"range","min":1.6,"max":3.2,"step":0.1,"default":2.4,"section":"World"},"seed":{"editor":"int","min":1,"max":65535,"default":24231,"section":"World"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  prop(n, d) { const v = this.props[n]; return (v === undefined || v === null || v === '') ? d : v; }
+  st() { return this.state || {}; }
+  stamp() { const d = new Date(), p = n => String(n).padStart(2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); }
+  renderVals() {
+    const s = this.st();
+    const mode = s.mode !== undefined ? s.mode : this.prop('mode', 'factory');
+    const raw = s.log || [];
+    const n = raw.length;
+    const log = raw.map((l, i) => { const c = l.text.charAt(0) === '#'; return { stamp: c ? '' : l.stamp, text: l.text, op: c ? '.7' : (.45 + .55 * (i + 1) / Math.max(n, 1)).toFixed(2), color: c ? '#8b987b' : '#a7b394' }; });
+    const stats = Object.assign({ power: 100, trains: 3, bots: 0, threats: 0, rockets: 0, research: '—' }, s.stats || {});
+    return {
+      mode, isHub: mode === 'hub', isFactory: mode === 'factory', pressed: mode === 'factory' ? 'true' : 'false',
+      time: this.prop('time', 'night'), rain: !!this.prop('rain', false), zoom: this.prop('zoom', 2.4), seed: this.prop('seed', 24231),
+      log, stats, geo: s.geo || '47.6062° N · 122.3321° W · 2.4×',
+      enterFactory: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ mode: 'factory' }); },
+      exitFactory: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ mode: 'hub' }); },
+      toggle: () => this.setState({ mode: mode === 'factory' ? 'hub' : 'factory' }),
+      onEvent: (text) => { const cur = (this.st().log || []).slice(-5); cur.push({ stamp: this.stamp(), text: String(text) }); this.setState({ log: cur }); },
+      onStats: (st) => { this.setState({ stats: st }); },
+      onGeo: (g) => { if (g !== this.st().geo) this.setState({ geo: g }); },
+    };
+  }
+}
+</script>
+</body>
+</html>
