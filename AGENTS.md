@@ -140,7 +140,7 @@ Nix flake using devenv; plain Node also works.
   as a managed process.
 - npm scripts: `dev`, `build`, `preview`, `check` (`astro check`), `test`
   (`vitest run`, the unit suite).
-- Without nix: `npm install && npm run dev` with Node >= 22.22.0. That
+- Without nix: `npm install && npm run dev` with Node >= 22.23.4 (Astro 7.4's floor). That
   `engines` floor is Astro 7.4's own minimum, kept so a non-nix contributor
   gets a working install; `astro build` hard-fails below it. The nix
   toolchain pins Node 24 (`nodejs_24`), one major ahead; that gap is
