@@ -74,7 +74,7 @@ SHA-256>` for fixed-URL files under `public/`. Only `boot.js` uses it
 | `world/overlay.ts` | the one sanctioned Canvas2D user in `world/`: epoch-checked `saveRect`/`paint`/`restore` (the construction lot) |
 | `world/world.ts` | `World(seed, {cap, canvasFactory})`: `kindAt`, `paintRaster`, `chunk`/`peek` (true LRU), `epoch`, `generation`, `query(rect)` (seam-joined rails/roads), `findSite(kind, from, maxChunks)` |
 | `live/*.ts` | per-frame layer over the chunk blits, view-culled: `belts inserters machines water particles bots lights rain`; `live/index.ts` exposes the push APIs events use |
-| `events/*.ts` | one machine per file: `raid spider storm lot silo trains car jams power radar research look`; `events/index.ts` builds them (`makeMachines`) |
+| `events/*.ts` | one machine per file: `raid spider storm lot silo drop trains car jams power radar research look`; `events/index.ts` builds them (`makeMachines`) |
 | `sim.ts` | owns World, Cam, Live, the machines, env and stats; `step(dt)`, `draw()`, `stillFrame()` |
 | `camera.ts` | `Cam`: POI waypoints, event holds, zoom breathing, `lookAt`, `prefer`, `geo()` |
 | `journal.ts` | the DOM log ring (`textContent` only) and the ambient list |
@@ -355,7 +355,13 @@ have no site of their own; stations sit only on hubs the rail mainline (tile
 column 44 mod 64) crosses, so after 40 s without an arrival `trains` visits
 the nearest such hub within 4 chunks (target priority 1, up to 45 s; 8.5 while
 a train brakes into it, above a raid fight) and marks a hub with no station,
-or with one no train reaches within 12 s, as unserved. Each step
+or with one no train reaches within 12 s, as unserved. `drop` is the cargo
+pod, on its own timer (first at 90 s, then every 90–180 s; not part of the
+silo cycle): it lands on open land just outside a hub pad whose whole drop is
+on screen (`isLandPx` all round, off the lot, rails and roads), never starts
+while a rival (raid, silo, trains, look) steers the camera at priority ≥ 8,
+and once falling holds it at 8.2 — over a raid, under a train arrival. If no
+hub comes on screen within 60 s (`wants()` asks for one) it reschedules. Each step
 a bound machine compares the site chunk's `epoch`; if the chunk was evicted it
 `reset()`s silently (no journal line) and keeps its accumulator. The
 construction lot paints through `world/overlay.ts` tokens, which are no-ops
@@ -476,8 +482,8 @@ repaints those). `live/`, `events/` and `camera.ts` use only `core/rng` +
   random; about 1 world in 10 has no nest-and-outpost pair near the box and so
   never raids, which `world.test.ts` bounds at ≤ 2 of 20), asserting every handoff section-9 item-7
   line appears (train, signal, belt jam, blueprint, raid start/end, radar,
-  research within 3 minutes; a launch within 6 (the cargo pod step was
-  removed, so there is no recovery line); it polls every
+  research within 3 minutes; a launch within 6. Cargo pod drops are not
+  required: they can wait on a hub coming on screen; it polls every
   5 s, so each deadline allows 5 s of slack). Run it after touching the dice,
   the camera or any event machine; if it fails, tune retry timing and POI
   bias, not the acceptance.

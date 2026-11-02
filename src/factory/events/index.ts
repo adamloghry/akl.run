@@ -1,5 +1,6 @@
 import type { EventMachine } from "../core/types";
 import { Car } from "./car";
+import { Drop } from "./drop";
 import { Jams } from "./jams";
 import { Look } from "./look";
 import { Lot } from "./lot";
@@ -26,12 +27,14 @@ export function makeMachines() {
   const radar = new Radar();
   const research = new Research();
   const look = new Look();
+  const drop = new Drop([raid, silo, trains, look]);
   const all: EventMachine[] = [
     raid,
     spider,
     storm,
     lot,
     silo,
+    drop,
     trains,
     car,
     jams,
@@ -40,5 +43,5 @@ export function makeMachines() {
     research,
     look,
   ];
-  return { all, raid, spider, storm, lot, silo, trains, car, jams, power, radar, research, look };
+  return { all, raid, spider, storm, lot, silo, drop, trains, car, jams, power, radar, research, look };
 }
