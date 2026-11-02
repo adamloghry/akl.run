@@ -2,7 +2,7 @@
 
 https://akl.run — projects, running on top of a small factory.
 
-Astro static site, nix flake dev env, deployed to Cloudflare Pages.
+Astro static site, nix flake dev env, deployed to Cloudflare Workers as static assets.
 
     nix develop --impure
     npm run dev

@@ -53,7 +53,7 @@ export async function serve(dir, port) {
       const body = await readFile(file);
       send(200, body, MIME[path.extname(file)] ?? "application/octet-stream");
     } catch {
-      // Like Pages: a miss gets dist/404.html with status 404.
+      // Like the Worker (not_found_handling "404-page"): a miss gets dist/404.html with status 404.
       const page = await readFile(path.join(root, "404.html")).catch(() => null);
       if (page) send(404, page, MIME[".html"]);
       else send(404, "not found", "text/plain");

@@ -12,3 +12,4 @@ tests/e2e/node_modules/
 .DS_Store
 .claude/
 .superpowers/
+.wrangler/

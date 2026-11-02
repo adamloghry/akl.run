@@ -206,29 +206,31 @@ changes golden.**
 
 ## Deploy
 
-- **Cloudflare Pages' Git integration deploys the site**, running `npm
-  clean-install && npm run build` on Cloudflare's image, outside nix, and
-  publishing `dist/`. Pushes to `trunk` go to production; other branches get
-  previews. It must be a **Pages** project, not a Worker: a Workers Builds
-  project runs `npx wrangler deploy` after the build.
-- **`wrangler.jsonc` must stay.** Its `pages_build_output_dir` marks the repo
-  as Pages, so a stray `wrangler deploy` refuses instead of autoconfiguring:
-  without it wrangler runs `astro add cloudflare` and rebuilds with the
-  adapter, which prerenders inside workerd, where `asset()` can't read
-  `public/`, and the build fails. Never add the Cloudflare adapter; there is
-  no server-side runtime.
-- **`404.html`** (`src/pages/404.astro`) is what Pages serves, with status
-  404, for any path with no file. It reuses `main.css` and the hub window
-  chrome but loads neither `boot.js` nor the engine. Every URL in it is
-  root-absolute because it answers at arbitrary depths. Without it Pages
-  would treat the site as an SPA and answer every unknown path with
-  `index.html` and a 200.
-- **One Pages project, two custom domains: `akl.run` and `factory.akl.run`.**
+- **Cloudflare Workers Builds deploys the site** as the assets-only Worker
+  `akl-run`. Dashboard settings: build command `npm run build`, deploy
+  command `npx wrangler deploy`, path `/` (the repo root, not an output
+  directory: `dist/` doesn't exist until the build runs). It runs on
+  Cloudflare's image with npm, outside nix. Pushes to `trunk` go to
+  production; other branches get preview versions (`wrangler versions
+  upload`).
+- **`wrangler.jsonc` must stay.** It points `assets.directory` at `./dist`,
+  so wrangler uploads the static build and nothing else. Without it
+  wrangler autoconfigures the repo: `astro add cloudflare`, then a rebuild
+  with the adapter, which prerenders inside workerd, where `asset()` can't
+  read `public/`, and the build fails. Never add the Cloudflare adapter;
+  there is no server-side runtime. `_headers` in `dist/` applies as-is.
+- **`404.html`** (`src/pages/404.astro`) is what the Worker serves, with
+  status 404, for any path with no file (`not_found_handling: "404-page"`).
+  It reuses `main.css` and the hub window chrome but loads neither `boot.js`
+  nor the engine. Every URL in it is root-absolute because it answers at
+  arbitrary depths.
+- **One Worker, two custom domains: `akl.run` and `factory.akl.run`.**
   No redirects. Both serve the same build; `boot.js` starts factory mode when
   `location.hostname` matches `^factory\.` (or the hash is `#factory`), with
   no hub flash. `<link rel="canonical">`, OG URLs and the sitemap stay
-  `https://akl.run/` on both. Adding the project and domains is dashboard work
-  the owner does; nothing in the repo needs to know about it.
+  `https://akl.run/` on both. The domains are dashboard work the owner does
+  (the Worker's Domains & Routes); nothing in the repo needs to know about
+  them.
 - Its Node comes from `.node-version` (`24`, matching the flake). Without it
   the image default (22.16 as of Oct 2026) is below the `engines` floor and
   `astro build` fails. Keep it in step with `nodejs_24`.
@@ -243,10 +245,12 @@ changes golden.**
   `flake.lock`) but only acts once the Renovate bot is installed.
 - **Deploying without CI:** `nix run .#deploy` builds nothing itself; it
   publishes `./result` (else `./dist`, or the directory you name) with
-  wrangler, tagged with the branch and commit. It needs
-  `CLOUDFLARE_API_TOKEN` (Pages:Edit), `CLOUDFLARE_ACCOUNT_ID` and
-  `CLOUDFLARE_PROJECT_NAME`. Prefer `nix build` first. Like the image tooling
-  it is an `app`, so wrangler never enters the build closure.
+  wrangler and `wrangler.jsonc`, messaged with the branch and commit: on
+  `trunk` it runs `wrangler deploy` (production), on any other branch
+  `wrangler versions upload --preview-alias <branch>` (a preview, like
+  Workers Builds). It needs `CLOUDFLARE_API_TOKEN` (Workers Scripts:Edit)
+  and `CLOUDFLARE_ACCOUNT_ID`. Prefer `nix build` first. Like the image
+  tooling it is an `app`, so wrangler never enters the build closure.
 
 ## Page states
 
@@ -492,8 +496,8 @@ repaints those). `live/`, `events/` and `camera.ts` use only `core/rng` +
 
 Three flake **apps** (`capture-og`, `optimize-og`, `update-golden`) plus
 `deploy`. The image tools are deliberately not in `packages.default`, `checks`
-or the devShell, so chromium (hundreds of MiB) never lands in CI or the Pages
-artifact; they're fetched only when someone runs them.
+or the devShell, so chromium (hundreds of MiB) never lands in CI or the deployed
+Worker; they're fetched only when someone runs them.
 
     npm run build                       # capture-og reads dist/, so build first
     nix run .#capture-og                # re-render + optimise public/images/og.png

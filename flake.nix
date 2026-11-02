@@ -80,7 +80,7 @@
           # Image tooling. Deliberately exposed as `apps`, NOT wired into
           # `packages.default` or `checks`: nothing here is realized during a
           # deploy build, so the OG pipeline's closure (chromium especially)
-          # never lands in CI or in the Cloudflare Pages artifact. Run on demand.
+          # never lands in CI or in the deployed Worker's assets. Run on demand.
           apps =
             let
               optimize-og = pkgs.writeShellApplication {
@@ -210,13 +210,15 @@
                   echo "wrote $out ($(stat -c%s "$out") bytes, seed $seed)"
                 '';
               };
-              # Deploy straight to Cloudflare Pages from a workstation, bypassing
-              # the Pages Git integration: nix build -> dereference -> upload.
+              # Deploy the assets-only Worker straight from a workstation,
+              # bypassing Workers Builds: nix build -> dereference -> upload.
               deploy = pkgs.writeShellApplication {
                 name = "deploy";
                 runtimeInputs = [
                   pkgs.wrangler
                   pkgs.git
+                  pkgs.coreutils
+                  pkgs.gnused
                 ];
                 text = ''
                   export WRANGLER_SEND_METRICS=false
@@ -235,28 +237,37 @@
                   fi
                   [ -f "$src/index.html" ] || { echo "error: $src/index.html not found" >&2; exit 1; }
 
-                  : "''${CLOUDFLARE_API_TOKEN:?set CLOUDFLARE_API_TOKEN (a token with the Cloudflare Pages:Edit permission)}"
+                  [ -f wrangler.jsonc ] || { echo "error: run from the repo root (wrangler.jsonc not found)" >&2; exit 1; }
+
+                  : "''${CLOUDFLARE_API_TOKEN:?set CLOUDFLARE_API_TOKEN (a token with the Workers Scripts:Edit permission)}"
                   : "''${CLOUDFLARE_ACCOUNT_ID:?set CLOUDFLARE_ACCOUNT_ID}"
-                  : "''${CLOUDFLARE_PROJECT_NAME:?set CLOUDFLARE_PROJECT_NAME (the Pages project name)}"
 
                   # result/ is a symlink into the read-only nix store; wrangler wants
-                  # a real, writable tree. -L dereferences it.
+                  # a real, writable tree. -L dereferences it. wrangler.jsonc names
+                  # ./dist, so lay the copy out next to it under that name.
                   work=$(mktemp -d)
                   trap 'rm -rf "$work"' EXIT
-                  cp -rL "$src" "$work/site"
-                  chmod -R u+w "$work/site"
+                  cp -rL "$src" "$work/dist"
+                  chmod -R u+w "$work/dist"
+                  cp wrangler.jsonc "$work/"
 
                   branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo detached)
-                  commit=$(git rev-parse HEAD 2>/dev/null || echo unknown)
+                  commit=$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
                   dirty=false
                   if ! git diff --quiet HEAD 2>/dev/null; then dirty=true; fi
+                  message="$branch@$commit dirty=$dirty"
 
-                  echo "deploying $src -> Pages project $CLOUDFLARE_PROJECT_NAME (branch $branch, dirty=$dirty)"
-                  wrangler pages deploy "$work/site" \
-                    --project-name "$CLOUDFLARE_PROJECT_NAME" \
-                    --branch "$branch" \
-                    --commit-hash "$commit" \
-                    --commit-dirty "$dirty"
+                  cd "$work"
+                  if [ "$branch" = trunk ]; then
+                    echo "deploying $src -> Worker akl-run, production ($message)"
+                    wrangler deploy --message "$message"
+                  else
+                    # Preview aliases are DNS labels: lowercase, [a-z0-9-].
+                    alias=$(printf '%s' "$branch" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-' '-' \
+                      | sed 's/--*/-/g; s/^-//' | cut -c1-40 | sed 's/-$//')
+                    echo "uploading $src -> Worker akl-run, preview '$alias' ($message)"
+                    wrangler versions upload --preview-alias "$alias" --message "$message"
+                  fi
                 '';
               };
             in
