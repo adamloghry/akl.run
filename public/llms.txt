@@ -12,7 +12,6 @@ Projects by Adam Loghry, running on top of a small factory: a busy pixel-art fac
 ## The factory
 
 - Press `m` to minimise or restore the window; press `r` to reroll the world.
-- Click the map to send the camera there and look around.
 - `?seed=0x…` permalinks reproduce a world (for example `https://akl.run/?seed=0xa85b492a`).
 - `https://factory.akl.run/` opens straight into factory mode.
 

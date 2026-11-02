@@ -57,7 +57,7 @@ export class Journal {
     a.className = "permalink";
     a.href = href;
     a.textContent = "?seed=" + seedHex;
-    li.append("# ", a, " · r to reroll · m for project list · click the map to look around");
+    li.append("# ", a, " · r to reroll · m for project list");
     const pin = ol.querySelector("[data-log-pinned]");
     if (pin) pin.after(li);
     else ol.prepend(li);
