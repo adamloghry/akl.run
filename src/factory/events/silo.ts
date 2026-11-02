@@ -9,21 +9,11 @@ import {
   type SiloSite,
 } from "../core/types";
 
-type Phase = "build" | "ready" | "launch" | "gone" | "pod" | "landed";
+type Phase = "build" | "ready" | "launch" | "gone";
 
 const PARTS_RATE = 1.5;
 const WAIT_MAX = 20;
-const FALL_SPEED = 14; // px/s
-const DRIFT = 2.2; // px/s west
-const FALL_HEIGHT = 280; // px above the landing spot where the pod appears
-const LAND_DX = 44; // landing spot east of the silo centre (beside the pad)
-const LAND_DY = 20;
-
-interface Pod {
-  x: number;
-  y: number;
-  landed: boolean;
-}
+const GONE_S = 9; // doors stay open after the rocket clears, then the next build starts
 
 export class Silo implements EventMachine {
   readonly name = "silo";
@@ -36,7 +26,6 @@ export class Silo implements EventMachine {
   private epoch = 0;
   private pending: { cx: number; cy: number; centre: Pt } | null = null;
   private waited = 0;
-  private pod: Pod | null = null;
   private ignited = false;
 
   state(): string {
@@ -49,7 +38,7 @@ export class Silo implements EventMachine {
 
   reset(): void {
     // the rocket already flew: start the next one from scratch; otherwise keep the parts
-    if (this.phase === "gone" || this.phase === "pod" || this.phase === "landed") this.parts = 0;
+    if (this.phase === "gone") this.parts = 0;
     this.phase = "build";
     this.t = 0;
     this.p = 0;
@@ -57,7 +46,6 @@ export class Silo implements EventMachine {
     this.site = null;
     this.pending = null;
     this.waited = 0;
-    this.pod = null;
     this.ignited = false;
   }
 
@@ -69,7 +57,6 @@ export class Silo implements EventMachine {
         priority: 9,
         ...(this.phase === "launch" ? { zoomOffset: -0.12 } : {}),
       };
-    if (this.phase === "pod" && this.pod) return { target: { x: this.pod.x, y: this.pod.y }, priority: 6 };
     if (this.pending) return { target: this.pending.centre, priority: 5 };
     return null;
   }
@@ -95,13 +82,7 @@ export class Silo implements EventMachine {
         this.updateLaunch(ctx);
         break;
       case "gone":
-        if (this.t > 9) this.startPod(ctx);
-        break;
-      case "pod":
-        this.updatePod(ctx);
-        break;
-      case "landed":
-        if (this.t > 6) this.reset(); // parts go back to 0 from "landed"
+        if (this.t > GONE_S) this.reset(); // parts go back to 0 from "gone"
         break;
     }
   }
@@ -173,40 +154,6 @@ export class Silo implements EventMachine {
     }
   }
 
-  private startPod(ctx: SimCtx): void {
-    const s = this.site!;
-    const landX = s.at.x + LAND_DX;
-    this.pod = {
-      x: landX + (DRIFT * FALL_HEIGHT) / FALL_SPEED,
-      y: s.at.y + LAND_DY - FALL_HEIGHT,
-      landed: false,
-    };
-    this.phase = "pod";
-    this.t = 0;
-    ctx.emit("cargo pod re-entering · tracking…");
-  }
-
-  private updatePod(ctx: SimCtx): void {
-    const pod = this.pod!,
-      landY = this.site!.at.y + LAND_DY;
-    pod.y += FALL_SPEED * ctx.dt;
-    pod.x -= DRIFT * ctx.dt;
-    if (pod.y < landY) return;
-    pod.y = landY;
-    pod.landed = true;
-    this.phase = "landed";
-    this.t = 0;
-    ctx.stats.science++;
-    ctx.emit("cargo pod recovered · 1 space-science-pack");
-    for (let k = 0; k < 8; k++)
-      ctx.live.spawn("dust", pod.x + ctx.rand.range(-4, 4), pod.y, {
-        vx: ctx.rand.range(-3, 3),
-        vy: -1,
-        life: 1.5,
-        size: 1.3,
-      });
-  }
-
   draw(g: CanvasRenderingContext2D, d: DrawCtx): void {
     const s = this.site;
     if (!s) return;
@@ -226,7 +173,7 @@ export class Silo implements EventMachine {
     const open =
       this.phase === "ready"
         ? Math.min(1, this.t / 3)
-        : this.phase === "launch" || this.phase === "gone" || this.phase === "pod" || this.phase === "landed"
+        : this.phase === "launch" || this.phase === "gone"
           ? 1
           : 0;
     g.fillStyle = "#1a1d20";
@@ -279,28 +226,6 @@ export class Silo implements EventMachine {
       g.fill();
       g.fillRect(x - 4, ry + 8, 2, 4);
       g.fillRect(x + 2, ry + 8, 2, 4);
-    }
-    const pod = this.pod;
-    if (pod && !pod.landed) {
-      g.strokeStyle = "#f4f7f8";
-      g.lineWidth = 0.8;
-      g.beginPath();
-      g.arc(pod.x, pod.y - 7, 6, Math.PI, 0);
-      g.stroke();
-      g.beginPath();
-      g.moveTo(pod.x - 6, pod.y - 7);
-      g.lineTo(pod.x, pod.y);
-      g.lineTo(pod.x + 6, pod.y - 7);
-      g.stroke();
-      g.fillStyle = "#dfe3e6";
-      g.fillRect(pod.x - 1.5, pod.y - 1, 3, 3);
-      g.fillStyle = "#c0392b";
-      g.fillRect(pod.x - 1.5, pod.y - 1, 3, 1);
-    } else if (pod) {
-      g.fillStyle = "#dfe3e6";
-      g.fillRect(pod.x - 1.5, pod.y - 1, 3, 3);
-      g.fillStyle = "rgba(244,247,248,.7)";
-      g.fillRect(pod.x + 2, pod.y - 2, 6, 3);
     }
     g.restore();
   }

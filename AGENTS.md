@@ -476,7 +476,8 @@ repaints those). `live/`, `events/` and `camera.ts` use only `core/rng` +
   random; about 1 world in 10 has no nest-and-outpost pair near the box and so
   never raids, which `world.test.ts` bounds at ≤ 2 of 20), asserting every handoff section-9 item-7
   line appears (train, signal, belt jam, blueprint, raid start/end, radar,
-  research within 3 minutes; launch and pod recovery within 6; it polls every
+  research within 3 minutes; a launch within 6 (the cargo pod step was
+  removed, so there is no recovery line); it polls every
   5 s, so each deadline allows 5 s of slack). Run it after touching the dice,
   the camera or any event machine; if it fails, tune retry timing and POI
   bias, not the acceptance.

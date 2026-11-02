@@ -100,7 +100,7 @@ describe.skipIf(!built)("page driver", () => {
     const lines = [...document.querySelectorAll("[data-log] .log-line--comment")];
     expect(lines.length).toBe(2);
     expect(lines[0].hasAttribute("data-log-pinned")).toBe(true);
-    expect(lines[1].textContent).toMatch(/^# factory simulator run started · seed /);
+    expect(lines[1].textContent).toMatch(/^# \?seed=0x[0-9a-f]{8} · /);
     expect(document.querySelector("[data-log-static]")).toBeNull();
   });
   it("__mapgen.setMode and the frame loop work", () => {

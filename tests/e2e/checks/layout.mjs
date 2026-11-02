@@ -89,10 +89,10 @@ async function factoryChecks(browser, fail, notes) {
     );
     await context.close();
   }
-  // the hint follows the input type, not the width
+  // the hint follows the input type, not the width: keyboard devices only, none on touch
   for (const [touch, want, w] of [
     [false, "hint--desktop", 390],
-    [true, "hint--touch", 1200],
+    [true, null, 1200],
   ]) {
     const { page, context } = await open(browser, { w, h: 844, touch });
     const shown = await page.evaluate(() =>
@@ -100,8 +100,8 @@ async function factoryChecks(browser, fail, notes) {
         .filter((el) => getComputedStyle(el).display !== "none")
         .map((el) => el.className),
     );
-    if (shown.length !== 1 || !shown[0].includes(want))
-      fail(`hint at ${w}px touch=${touch}: shown [${shown}], want only ${want}`);
+    if (want ? shown.length !== 1 || !shown[0].includes(want) : shown.length !== 0)
+      fail(`hint at ${w}px touch=${touch}: shown [${shown}], want ${want ? "only " + want : "none"}`);
     notes.push(`hint touch=${touch} ${w}px: ${shown.join(",")}`);
     await context.close();
   }

@@ -27,20 +27,20 @@ const run = (m: Silo, ctx: ReturnType<typeof testCtx>, seconds: number) => {
 };
 
 describe("Silo", () => {
-  it("runs parts → ready → launch → pod → recovered with exact lines", () => {
+  it("runs parts → ready → launch → gone → build with exact lines (no cargo pod)", () => {
     const w = fakeWorld({ silos: [site] }, { "0,0": "silo" }),
       silo = new Silo(),
       ctx = testCtx(w);
-    run(silo, ctx, 120);
+    // build 66.7 s + ready 10 + launch 7 + gone 9 ≈ 93 s, then parts restart from 0
+    run(silo, ctx, 100);
     expect(ctx.lines).toEqual([
       "rocket silo: 100/100 parts · launch sequence started (T-10)",
       "rocket launched · payload: satellite",
-      "cargo pod re-entering · tracking…",
-      "cargo pod recovered · 1 space-science-pack",
     ]);
     expect(ctx.stats.rockets).toBe(1);
-    expect(ctx.stats.science).toBe(1);
-    expect(ctx.stats.parts).toBeLessThan(10);
+    expect(ctx.stats.science).toBe(0);
+    expect(silo.state()).toBe("build");
+    expect(ctx.stats.parts).toBeLessThan(15);
   });
   it("holds at 100 parts and wants a silo when none exists", () => {
     const w = fakeWorld({}, {}),
@@ -78,6 +78,6 @@ describe("Silo", () => {
         silo.camHint();
       }
     }
-    expect([...seen].sort()).toEqual(["build", "gone", "landed", "launch", "pod", "ready"]);
+    expect([...seen].sort()).toEqual(["build", "gone", "launch", "ready"]);
   });
 });

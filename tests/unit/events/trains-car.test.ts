@@ -152,6 +152,29 @@ describe("Trains", () => {
     expect([...seen].sort()).toEqual(["+x", "-x"]);
   });
 
+  it("stops at the end of the rail and never runs a car off it (into the water past a terminus)", () => {
+    const w = multiWorld([hLine("s", 0, 200, 420)]);
+    const ctx = testCtx(w, { cam: mkCam() });
+    const m = new Trains();
+    const g = fakeContext();
+    const d = testDrawCtx(); // x0 = 0, z = 2.4: world x = screen x / 2.4
+    let cars = 0;
+    ctx.run((c) => {
+      m.update(c);
+      g.calls.length = 0;
+      m.draw(g, d);
+      for (const [k, x] of g.calls) {
+        if (k !== "translate") continue;
+        cars++;
+        const wx = (x as number) / 2.4;
+        // the longest car (a loco) is 2.6 tiles; its whole body stays on the rail
+        expect(wx).toBeGreaterThanOrEqual(200 + (2.6 * 6) / 2 - 0.5);
+        expect(wx).toBeLessThanOrEqual(420 - (2.6 * 6) / 2 + 0.5);
+      }
+    }, 60);
+    expect(cars).toBeGreaterThan(0);
+  });
+
   it("draws a headlight cone at night", () => {
     const ctx = testCtx(trainWorld(), { cam });
     const m = new Trains();

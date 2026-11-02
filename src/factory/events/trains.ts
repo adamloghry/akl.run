@@ -20,6 +20,7 @@ const CRUISE = 3.4 * T; // px/s
 const ACCEL = 14; // px/s²
 const BRAKE = 14; // px/s²
 const STOP_TIME = 4.5;
+const END_WAIT = 2; // s at a buffer stop before heading back
 const MIN_LINE = 28 * T;
 const SIGNAL_EVERY = 150;
 const SIGNAL_BEFORE_STATION = 70;
@@ -471,12 +472,23 @@ export class Trains implements EventMachine {
         if (x >= v.x0 && x <= v.x1 && y >= v.y0 && y <= v.y1) this.approaching = true;
         if (nextStation.id === this.visit?.stationId) this.arriving = true;
       }
-      let vt = CRUISE;
-      if (nextStation) vt = Math.min(CRUISE, Math.max(2.5, Math.sqrt(2 * BRAKE * dist)));
+      // A line ends where the rail does: 2 tiles from water (a terminus), or the loaded area's edge
+      // (a chunk past the view, where off-view despawn gets there first). Brake into it like a station.
+      const toEnd = Math.max(0, tr.dir > 0 ? line.L - tr.s : tr.s);
+      let vt = Math.min(CRUISE, Math.max(2.5, Math.sqrt(2 * BRAKE * toEnd)));
+      if (nextStation) vt = Math.min(vt, Math.max(2.5, Math.sqrt(2 * BRAKE * dist)));
       const before = tr.speed;
       tr.speed += Math.max(-BRAKE * dt, Math.min(ACCEL * dt, vt - tr.speed));
       const move = tr.speed * dt;
-      if (nextStation && move >= dist - 0.3) {
+      if (move >= toEnd - 0.3 && !(nextStation && dist <= toEnd)) {
+        // buffer stop: halt with the head at the rail's end, then reverse in place (same footprint)
+        tr.s = tr.dir > 0 ? line.L : 0;
+        tr.s -= tr.dir * TRAIN_LEN;
+        tr.dir = tr.dir > 0 ? -1 : 1;
+        tr.speed = 0;
+        tr.wait = END_WAIT;
+        tr.last = null;
+      } else if (nextStation && move >= dist - 0.3) {
         tr.s = nextStation.s;
         tr.speed = 0;
         tr.wait = STOP_TIME;
@@ -511,18 +523,6 @@ export class Trains implements EventMachine {
               life: 0.7,
               size: 0.9,
             });
-        }
-        // open lines: run fully off the end, then reverse
-        if (tr.dir > 0 && tr.s > line.L + TRAIN_LEN) {
-          tr.dir = -1;
-          tr.s = line.L + TRAIN_LEN;
-          tr.last = null;
-          tr.speed = 0;
-        } else if (tr.dir < 0 && tr.s < -TRAIN_LEN) {
-          tr.dir = 1;
-          tr.s = -TRAIN_LEN;
-          tr.last = null;
-          tr.speed = 0;
         }
       }
     }

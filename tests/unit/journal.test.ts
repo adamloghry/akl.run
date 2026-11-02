@@ -35,7 +35,7 @@ describe("Journal", () => {
     expect(ol.querySelector("[data-log-static]")).toBeNull();
     expect(ol.children[0].hasAttribute("data-log-pinned")).toBe(true);
     expect(ol.children[1].textContent).toBe(
-      "# factory simulator run started · seed 0x00c0ffee · r to reroll · m to minimize · click the map to look around",
+      "# ?seed=0x00c0ffee · r to reroll · m for project list · click the map to look around",
     );
     expect(ol.children[1].querySelector("a.permalink")!.getAttribute("href")).toBe("?seed=0x00c0ffee");
     j.runStart("0x1", "?seed=0x1");

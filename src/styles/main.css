@@ -279,6 +279,9 @@ a:focus-visible,
 .hint {
   font-style: italic;
 }
+.hint--desktop {
+  font-size: 70%;
+}
 
 /* The whole factory row is one stretched link; .out stays above it. */
 .project-name--stretch::after {
@@ -460,16 +463,10 @@ html.factory .prod {
 html:not(.js) .hint {
   display: none;
 }
-.hint--touch {
-  display: none;
-}
-/* Pick the hint by input type, not width. */
+/* The hint is a keyboard shortcut: touch devices (by input type, not width) get none. */
 @media (hover: none) and (pointer: coarse) {
   .hint--desktop {
     display: none;
-  }
-  .hint--touch {
-    display: inline;
   }
 }
 

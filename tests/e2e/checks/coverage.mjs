@@ -10,7 +10,6 @@ const REQ = [
   [180, /^radar .* charted/],
   [180, /^research (started|complete)/],
   [360, /^rocket launched/],
-  [360, /^cargo pod recovered/],
 ];
 
 export async function run(browser) {
