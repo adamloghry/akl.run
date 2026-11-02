@@ -172,8 +172,8 @@ Nix flake using devenv; plain Node also works.
 
 ## Output is byte-pinned
 
-`golden/` holds a snapshot of the build output: the three generated files
-(`index.html`, `sitemap-index.xml`, `sitemap-0.xml`) verbatim, plus
+`golden/` holds a snapshot of the build output: the four generated files
+(`index.html`, `404.html`, `sitemap-index.xml`, `sitemap-0.xml`) verbatim, plus
 `manifest.sha256` covering every file in `dist/` by hash — the `public/`
 passthrough (including `og.png`) **and the hashed `_astro/*` files**. The
 `golden-output` check diffs a fresh build against it.
@@ -207,8 +207,22 @@ changes golden.**
 ## Deploy
 
 - **Cloudflare Pages' Git integration deploys the site**, running `npm
-  clean-install && npm run build` on Cloudflare's image, outside nix. Pushes
-  to `trunk` go to production; other branches get previews.
+  clean-install && npm run build` on Cloudflare's image, outside nix, and
+  publishing `dist/`. Pushes to `trunk` go to production; other branches get
+  previews. It must be a **Pages** project, not a Worker: a Workers Builds
+  project runs `npx wrangler deploy` after the build.
+- **`wrangler.jsonc` must stay.** Its `pages_build_output_dir` marks the repo
+  as Pages, so a stray `wrangler deploy` refuses instead of autoconfiguring:
+  without it wrangler runs `astro add cloudflare` and rebuilds with the
+  adapter, which prerenders inside workerd, where `asset()` can't read
+  `public/`, and the build fails. Never add the Cloudflare adapter; there is
+  no server-side runtime.
+- **`404.html`** (`src/pages/404.astro`) is what Pages serves, with status
+  404, for any path with no file. It reuses `main.css` and the hub window
+  chrome but loads neither `boot.js` nor the engine. Every URL in it is
+  root-absolute because it answers at arbitrary depths. Without it Pages
+  would treat the site as an SPA and answer every unknown path with
+  `index.html` and a 200.
 - **One Pages project, two custom domains: `akl.run` and `factory.akl.run`.**
   No redirects. Both serve the same build; `boot.js` starts factory mode when
   `location.hostname` matches `^factory\.` (or the hash is `#factory`), with

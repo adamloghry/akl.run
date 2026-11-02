@@ -1,0 +1,11 @@
+// Cloudflare Pages project config. `pages_build_output_dir` marks this as a
+// Pages project: `wrangler pages deploy` reads it, and a stray `wrangler
+// deploy` refuses with a pointer to Pages instead of "autoconfiguring" the
+// repo (`astro add cloudflare`, then a rebuild that prerenders inside workerd,
+// where src/lib/asset.ts can't read public/ and the build fails). This is a
+// static site: no adapter, no Functions, no bindings.
+{
+  "name": "akl-run",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-10-01",
+}

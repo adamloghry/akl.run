@@ -495,6 +495,22 @@ html:not(.js) .hint {
   }
 }
 
+/* ---- 404 (src/pages/404.astro): the hub window, narrower, with no canvas behind it ---- */
+.lost {
+  width: 620px;
+}
+.lost-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 0 6px;
+}
+.lost-text {
+  font: 400 15.5px/1.35 var(--serif);
+  color: var(--desc);
+  text-wrap: pretty;
+}
+
 /* ---- Phone ---- */
 @media (max-width: 760px) {
   .page {

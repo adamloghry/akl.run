@@ -53,7 +53,10 @@ export async function serve(dir, port) {
       const body = await readFile(file);
       send(200, body, MIME[path.extname(file)] ?? "application/octet-stream");
     } catch {
-      send(404, "not found", "text/plain");
+      // Like Pages: a miss gets dist/404.html with status 404.
+      const page = await readFile(path.join(root, "404.html")).catch(() => null);
+      if (page) send(404, page, MIME[".html"]);
+      else send(404, "not found", "text/plain");
     }
   });
   await new Promise((resolve, reject) => {

@@ -4,12 +4,13 @@
     let
       generated = [
         "index.html"
+        "404.html"
         "sitemap-index.xml"
         "sitemap-0.xml"
       ];
     in
     {
-      # Fails on any byte change to the deployed output. The three
+      # Fails on any byte change to the deployed output. The four
       # generated files are compared verbatim so failures print a real
       # diff; everything else in dist/ -- the public/ passthrough,
       # og.png included -- is covered by hash, which catches added,
