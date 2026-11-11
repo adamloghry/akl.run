@@ -211,8 +211,9 @@ changes golden.**
   command `npx wrangler deploy`, path `/` (the repo root, not an output
   directory: `dist/` doesn't exist until the build runs). It runs on
   Cloudflare's image with npm, outside nix. Pushes to `trunk` go to
-  production; other branches get preview versions (`wrangler versions
-  upload`).
+  production; other branches run the non-production deploy command `npx
+  wrangler preview`, which fails unless `wrangler.jsonc` has a `previews`
+  block (an empty `{}` is enough; keep it).
 - **`wrangler.jsonc` must stay.** It points `assets.directory` at `./dist`,
   so wrangler uploads the static build and nothing else. Without it
   wrangler autoconfigures the repo: `astro add cloudflare`, then a rebuild
