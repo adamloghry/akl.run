@@ -68,8 +68,10 @@ SHA-256>` for fixed-URL files under `public/`. Only `boot.js` uses it
 | `core/types.ts` | the frozen contracts (`Features`, `RecipeCtx`, `SimCtx`, `EventMachine`, `Stats`, `T=6`, `CH=32`, `CPX=192`, `AP=3`, …) |
 | `world/geo.ts` | Seattle polygon, land mask, shore distance, tile↔lat/lon, `DOWNTOWN`, `CENTRAL_BOX` |
 | `world/palette.ts`, `sprites.ts` | colours; structure painters drawing onto a `Raster` |
-| `world/terrain.ts` | `chunkBase`, `baseKind` (kind dice), ground painting, the rail mainline and the painted road network (bridges, level crossings, nest rubble) |
-| `world/roads.ts` | the connected road network: land lattice, short-bridge rule, per-seed paved edges, spare edges biters may break |
+| `world/terrain.ts` | `chunkBase`, `baseKind` (kind dice), ground painting, and painting both networks: rails (bridges, junctions, spurs, buffer stops) then roads (bridges, level crossings, nest rubble) |
+| `world/lattice.ts` | the shared network builder: land lattice, short-bridge rule, largest component, per-seed paving (Kruskal joiners), spare edges |
+| `world/roads.ts` | the road network's spec (highway/connector lattice, 1/4 of E-W edges, `MAX_BRIDGE`) |
+| `world/rails.ts` | the rail network's spec (mainlines joined by E-W links), `railAt` / `railEnd` incl. spurs |
 | `world/recipes/*.ts` | one recipe per district kind: `wild mine smelt asm power hub outpost nest labs solar oil storage silo` (+ `bank.ts` shared helpers) |
 | `world/pairing.ts` | pure nest/outpost pairing (`nestCandidate`, `pairedOutpost`) |
 | `world/overlay.ts` | the one sanctioned Canvas2D user in `world/`: epoch-checked `saveRect`/`paint`/`restore` (the construction lot) |
@@ -309,7 +311,7 @@ grass/dirt noise, `3` trees (a tree where it is > .34, dark > .58), `4`/`8`
 ore noise, `5` ore kind, `500` the industrial die (16 faces), `504` silo
 override (1/8), `506` forest override (1/10), `510` nest roll (1/4),
 `520` road joiner order, `521` E-W road pick (1/4), `530` road rubble,
-`531` which nest arm biters break first, `610` furnace variant, `670`–`673` nest creep/spawners,
+`531` which nest arm biters break first, `540`/`541` rail link pick (unused, share 0) / joiner order, `610` furnace variant, `670`–`673` nest creep/spawners,
 `680` labs, `690`/`691` solar, `700`/`701` oil. Adding, removing or reordering
 an `rnd()` call, or changing a salt, changes every chunk of every seed and
 invalidates every shared `?seed=` permalink; pixel-art painters are frozen
@@ -331,7 +333,7 @@ faces. A unit test requires hub, silo and a nest+outpost pair within reach on
 numbers changed the world for every seed once, before the look was frozen;
 now they are frozen too.
 
-**Road network** (`world/roads.ts`, pure; painted by `terrain.paintCommon`).
+**Road network** (`world/roads.ts` on `world/lattice.ts`, pure; painted by `terrain.paintCommon`).
 Roads are one connected network, not per-chunk corridors. It is a lattice
 with one node per chunk at the junction of the 3-wide N-S highway (tile
 columns 14–16) and the 2-wide E-W connector (rows 15–16). An edge is
@@ -351,11 +353,33 @@ gap on one junction arm (salt 531 picks which arm to try first), and only on
 an arm whose edge is *spare*, meaning off a spanning tree of the paved
 network. So every remaining road still connects, and each break leaves two
 dead-end stubs (0–2 breaks per seed in practice).
-`tests/unit/world/roads.test.ts` paints every land chunk for several seeds
-and requires the painted segments to form exactly one component. It also
-checks that every paved edge's water run is within `MAX_BRIDGE`. Don't give
-up that test to make a recipe fit; recipes must route around reserved road
-tiles (`ctx.free`).
+
+**Rail network** (`world/rails.ts` on the same `lattice.ts`; painted first,
+so roads and recipes avoid it). The N-S mainlines stay at tile column 44 mod
+64 (lineId `rail:<col>`), with one node per chunk at row 7 (`RAIL_ROW`, clear
+of the E-W road and of every lamp and pole). They are joined by E-W links
+along row 7 between neighbouring mainlines (lineId `rail:h<cy>`). Every
+passable mainline edge is laid; links are laid **only** where they join
+otherwise separate parts (Kruskal, salt 541 order). That makes one network
+with as little extra track as possible: about 14 links for the card's seed,
+74 of 75 land nodes. Bridges follow the same `MAX_BRIDGE` rule. A junction
+tile draws the link's rails over the mainline's. **Spurs:** where a mainline
+edge can't be laid (too much water ahead), a connected junction still sends
+a dead-end spur toward it, as far as the land stays ≥ 2 tiles from the
+shore (≥ 4 tiles or none), ending in a red buffer stop. Spurs keep hubs
+beside the water on the line (the hub recipe's station check needs the
+mainline through its pad) without any orphan track. Roads cross rails on
+level crossings either way: rail steel drawn over the asphalt or deck. The
+hub recipe picks the *vertical* rail for its station
+(`rails.find(a.x === b.x)`), never a link. Trains run on links too (any line
+≥ 28 tiles), but they don't switch lines at junctions: each train shuttles
+on its own line. Rails are never broken by biters.
+
+`tests/unit/world/networks.test.ts` paints every land chunk for several seeds
+and requires the painted road segments, and separately the painted rail
+segments, to each form exactly one component. It also checks that every
+laid edge's water run is within `MAX_BRIDGE`. Don't give up that test to
+make a recipe fit; recipes must route around reserved tiles (`ctx.free`).
 
 **Nest/outpost pairing** (`world/pairing.ts`, pure and bounded). A chunk with
 land ≥ .6 whose base kind is not `hub`, `silo` or `mine` is a *nest candidate*
@@ -391,7 +415,7 @@ camera, 4)` searches `kindAt` outward up to 4 chunks (raid → nest and its
 outpost; lot, spider, car → hub; silo → silo); if none, it re-arms with a
 short retry and `wants()` biases the camera toward the kind it needs. Trains
 have no site of their own; stations sit only on hubs the rail mainline (tile
-column 44 mod 64) crosses, so after 40 s without an arrival `trains` visits
+column 44 mod 64, spurs included) crosses, so after 40 s without an arrival `trains` visits
 the nearest such hub within 4 chunks (target priority 1, up to 45 s; 8.5 while
 a train brakes into it, above a raid fight) and marks a hub with no station,
 or with one no train reaches within 12 s, as unserved. `drop` is the cargo

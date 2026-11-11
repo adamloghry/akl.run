@@ -2,7 +2,10 @@ import { describe, it, expect } from "vitest";
 import { World } from "../../../src/factory/world/world";
 import { LAND_TILES, landAtTile } from "../../../src/factory/world/geo";
 import { MAX_BRIDGE, roadNet } from "../../../src/factory/world/roads";
-import { CH, T, type RoadSeg } from "../../../src/factory/core/types";
+import { mainlineX, railNet, RAIL_ROW } from "../../../src/factory/world/rails";
+import { CH, T, type Pt } from "../../../src/factory/core/types";
+
+type Seg = { a: Pt; b: Pt };
 import { fakeCanvas } from "../../fakes/canvas";
 
 const SEEDS = [0xa85b492a, 1, 2, 3, 0xdeadbeef];
@@ -11,25 +14,29 @@ const cx0 = Math.floor(LAND_TILES.tx0 / CH) - 1,
   cx1 = Math.floor(LAND_TILES.tx1 / CH) + 1,
   cy1 = Math.floor(LAND_TILES.ty1 / CH) + 1;
 
-/** Every painted road segment of every land chunk, plus the chunks that are nests. */
+/** Every painted road and rail segment of every land chunk, plus the chunks that are nests. */
 function paintAll(seed: number) {
   const w = new World(seed, { cap: 16, canvasFactory: fakeCanvas });
-  const segs: RoadSeg[] = [];
+  const segs: Seg[] = [],
+    rails: Seg[] = [];
   const nests = new Set<string>();
   for (let cy = cy0; cy <= cy1; cy++)
     for (let cx = cx0; cx <= cx1; cx++) {
       const { features, kind } = w.paintRaster(cx, cy);
       segs.push(...features.roads);
+      rails.push(...features.rails);
       if (kind === "nest") nests.add(`${cx},${cy}`);
     }
-  return { segs, nests };
+  return { segs, rails, nests };
 }
+const painted = new Map<number, ReturnType<typeof paintAll>>();
+const paintOnce = (seed: number) => painted.get(seed) ?? painted.set(seed, paintAll(seed)).get(seed)!;
 
 /** Components of the painted segments: touching collinear runs and crossing perpendicular ones join. */
-function components(segs: RoadSeg[]): number {
+function components(segs: Seg[]): number {
   const parent = segs.map((_, i) => i);
   const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
-  const span = (s: RoadSeg) => ({
+  const span = (s: Seg) => ({
     v: s.a.x === s.b.x,
     x0: Math.min(s.a.x, s.b.x),
     x1: Math.max(s.a.x, s.b.x),
@@ -44,7 +51,7 @@ function components(segs: RoadSeg[]): number {
   return new Set(segs.map((_, i) => find(i))).size;
 }
 
-describe("road network", () => {
+describe("road and rail networks", () => {
   it("the paved lattice is one connected graph for every seed", () => {
     for (const seed of SEEDS) {
       const net = roadNet(seed);
@@ -79,7 +86,7 @@ describe("road network", () => {
 
   it("painted roads form one network even where biters broke a road", () => {
     for (const seed of SEEDS) {
-      const { segs, nests } = paintAll(seed);
+      const { segs, nests } = paintOnce(seed);
       expect(nests.size, `seed ${seed}`).toBeGreaterThan(0);
       expect(components(segs), `seed ${seed}`).toBe(1);
     }
@@ -109,6 +116,39 @@ describe("road network", () => {
           expect(r, `ew ${cx},${cy}`).toBeLessThanOrEqual(MAX_BRIDGE);
           if (r) bridges++;
         }
+      }
+    expect(bridges).toBeGreaterThan(0);
+  });
+
+  it("painted rails form one network: mainlines joined by E-W links, no orphan track", () => {
+    for (const seed of SEEDS) {
+      const { rails } = paintOnce(seed);
+      expect(
+        rails.some((r) => r.a.y === r.b.y),
+        `seed ${seed}: an E-W link`,
+      ).toBe(true);
+      expect(components(rails), `seed ${seed}`).toBe(1);
+    }
+  });
+
+  it("rail bridges are short too", () => {
+    const net = railNet(SEEDS[0]);
+    let bridges = 0;
+    for (let cy = cy0; cy <= cy1; cy++)
+      for (let m = -2; m <= 8; m++) {
+        const x = mainlineX(m),
+          y = cy * CH + RAIL_ROW;
+        let run = 0,
+          best = 0;
+        if (net.v(m, cy))
+          for (let k = 1; k < CH; k++) best = Math.max(best, (run = landAtTile(x, y + k) ? 0 : run + 1));
+        if (net.h(m, cy)) {
+          run = 0;
+          for (let k = 1; k < mainlineX(m + 1) - x; k++)
+            best = Math.max(best, (run = landAtTile(x + k, y) ? 0 : run + 1));
+        }
+        expect(best, `rail ${m},${cy}`).toBeLessThanOrEqual(MAX_BRIDGE);
+        if (best) bridges++;
       }
     expect(bridges).toBeGreaterThan(0);
   });
