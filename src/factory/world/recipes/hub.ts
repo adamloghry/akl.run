@@ -129,7 +129,7 @@ export const hub: Recipe = (ctx) => {
   }
 
   // station platform beside the rail mainline
-  const rail = ctx.feat.features.rails[0];
+  const rail = ctx.feat.features.rails.find((r) => r.a.x === r.b.x); // the mainline, not an E-W link
   if (rail) {
     const col = Math.floor(rail.a.x / T),
       y0 = Math.floor(Math.min(rail.a.y, rail.b.y) / T),

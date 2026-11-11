@@ -4,6 +4,7 @@ import { hash, noise, vnoise } from "../core/hash";
 import { AP, CH, T, type DistrictKind, type OreKind, type RecipeCtx } from "../core/types";
 import { landMask } from "./geo";
 import { BRIDGE, PAL, RAIL, ROAD } from "./palette";
+import { mainlineIndex, mainlineX, RAIL_ROW, railAt, railEnd, railNet } from "./rails";
 import { ROAD_COL, ROAD_ROW, roadNet } from "./roads";
 import * as S from "./sprites";
 
@@ -167,24 +168,66 @@ export function paintCommon(ctx: RecipeCtx): void {
     ctx.feat.machine("pole", c, r, 1, 1);
   };
 
-  // rail mainline first: everything else avoids it
-  const rcol = mainlineCol(X0);
-  const railRows = new Set<number>();
+  // Rails first (everything else avoids them), following the connected network in rails.ts: the N-S
+  // mainline and the E-W links that join mainlines, with short bridges and junction tiles.
+  const bridged = new Set<string>();
+  const deck = (x: number, y: number, w: number, h: number) => {
+    ctx.tr(x, y, w, h, BRIDGE.deck);
+    for (let k = 0; k < w; k++) for (let q = 0; q < h; q++) bridged.add(`${x + k},${y + q}`);
+  };
+  const railDeck = (x: number, y: number, vertical: boolean) => {
+    deck(x, y, 1, 1);
+    for (const o of [0, 3])
+      ctx.p(x, y, vertical ? 0 : o, vertical ? o : 0, vertical ? 6 : 1, vertical ? 1 : 6, RAIL.tie);
+    for (const o of [1, 4])
+      ctx.p(x, y, vertical ? o : 0, vertical ? 0 : o, vertical ? 1 : 6, vertical ? 6 : 1, RAIL.steel);
+  };
+  const rnet = railNet(ctx.seed),
+    { cx, cy } = ctx;
+  const rcol = mainlineCol(X0),
+    railY = Y0 + RAIL_ROW;
+  const mainline = new Set<string>(); // vertical rail tiles: E-W roads cross them
+  const links = new Set<number>(); // columns of E-W rail tiles on railY: N-S roads cross them
   if (rcol < X0 + CH) {
+    const m = mainlineIndex(rcol)!;
     let start = -1;
     for (let j = 0; j <= CH; j++) {
       const r = Y0 + j,
-        ok = j < CH && clear(ctx, rcol, r, 1, 1, 2, true);
-      if (ok && start < 0) start = r;
-      if (!ok && start >= 0) {
-        if (r - start >= 8) {
-          ctx.feat.rail([rcol, start], [rcol, r - 1], `rail:${rcol}`);
-          for (let q = start; q < r; q++) {
-            ctx.reserve(rcol, q, 1, 1);
-            S.rail(ctx, rcol, q, true);
-            railRows.add(q);
-          }
-        }
+        ok = j < CH && railAt(rnet, m, r);
+      if (ok) {
+        if (start < 0) start = r;
+        ctx.reserve(rcol, r, 1, 1);
+        if (ctx.land(rcol, r)) S.rail(ctx, rcol, r, true);
+        else railDeck(rcol, r, true);
+        if (railEnd(rnet, m, r)) ctx.p(rcol, r, 0, 2, 6, 2, RAIL.stop); // buffer stop
+        mainline.add(`${rcol},${r}`);
+      } else if (start >= 0) {
+        ctx.feat.rail([rcol, start], [rcol, r - 1], `rail:${rcol}`);
+        start = -1;
+      }
+    }
+  }
+  {
+    // E-W links: a tile on a mainline column is a junction, laid when either neighbouring link is
+    const on = (x: number) => {
+      const m = Math.floor((x - mainlineX(0)) / (mainlineX(1) - mainlineX(0)));
+      return mainlineX(m) === x ? rnet.h(m - 1, cy) || rnet.h(m, cy) : rnet.h(m, cy);
+    };
+    let start = -1;
+    for (let i = 0; i <= CH; i++) {
+      const x = X0 + i,
+        ok = i < CH && on(x);
+      if (ok) {
+        if (start < 0) start = x;
+        ctx.reserve(x, railY, 1, 1);
+        links.add(x);
+        if (mainline.has(`${x},${railY}`)) {
+          ctx.p(x, railY, 0, 1, 6, 1, RAIL.steel); // junction: the link's rails over the mainline's
+          ctx.p(x, railY, 0, 4, 6, 1, RAIL.steel);
+        } else if (ctx.land(x, railY)) S.rail(ctx, x, railY, false);
+        else railDeck(x, railY, false);
+      } else if (start >= 0) {
+        ctx.feat.rail([start, railY], [x - 1, railY], `rail:h${cy}`);
         start = -1;
       }
     }
@@ -193,8 +236,7 @@ export function paintCommon(ctx: RecipeCtx): void {
   // Roads follow the connected network in roads.ts: a 3-wide N-S highway and 2-wide E-W connectors,
   // short bridges where they cross water, level crossings over the mainline, and a broken stretch
   // where a road runs into a biter nest. Every paved tile is reserved before any recipe runs.
-  const net = roadNet(ctx.seed),
-    { cx, cy } = ctx;
+  const net = roadNet(ctx.seed);
   const roadV = X0 + ROAD_COL,
     roadH = Y0 + ROAD_ROW;
   const nsAt = (j: number) =>
@@ -223,7 +265,6 @@ export function paintCommon(ctx: RecipeCtx): void {
     for (let k = 0; k < 4 && !cut; k++) if (arms[(k0 + k) % 4].spare) cut = arms[(k0 + k) % 4];
   }
   const broken = (ns: boolean, n: number) => !!cut && cut.ns === ns && n >= cut.lo && n <= cut.hi;
-  const bridged = new Set<string>();
   const rubble = (x: number, y: number) => {
     ctx.reserve(x, y, 1, 1);
     S.creep(ctx, x, y, ctx.h(671, x, y));
@@ -231,9 +272,10 @@ export function paintCommon(ctx: RecipeCtx): void {
     if (h < 0.55) ctx.p(x, y, Math.floor(h * 7), Math.floor(((h * 31) % 1) * 4), 3, 2, ROAD.asphalt);
     if (h > 0.8) ctx.p(x, y, 1, 3, 2, 2, ROAD.edge);
   };
-  const deck = (x: number, y: number, w: number, h: number) => {
-    ctx.tr(x, y, w, h, BRIDGE.deck);
-    for (let k = 0; k < w; k++) for (let q = 0; q < h; q++) bridged.add(`${x + k},${y + q}`);
+  /** Level crossing: a rail's two steel lines drawn over the road surface (or deck) of one tile. */
+  const xing = (x: number, y: number, vertical: boolean) => {
+    for (const o of [1, 4])
+      ctx.p(x, y, vertical ? o : 0, vertical ? 0 : o, vertical ? 1 : 6, vertical ? 6 : 1, RAIL.steel);
   };
 
   // N-S highway (it also paints the node block where the two meet)
@@ -246,18 +288,21 @@ export function paintCommon(ctx: RecipeCtx): void {
     if (on) {
       if (start < 0) start = r;
       ctx.reserve(roadV, r, 3, 1);
+      const crossing = r === railY && [0, 1, 2].some((k) => links.has(roadV + k));
       if (!ctx.land(roadV, r) || !ctx.land(roadV + 1, r) || !ctx.land(roadV + 2, r)) {
         deck(roadV, r, 3, 1);
         ctx.p(roadV, r, 0, 5, 18, 1, BRIDGE.seam);
         ctx.p(roadV, r, 0, 0, 1, 6, BRIDGE.rail);
         ctx.p(roadV, r, 17, 0, 1, 6, BRIDGE.rail);
         ctx.p(roadV, r, 18, 1, 1, 5, BRIDGE.shadow);
+        if (crossing) for (let k = 0; k < 3; k++) xing(roadV + k, r, false);
         continue;
       }
       ctx.tr(roadV, r, 3, 1, ROAD.asphalt);
       ctx.p(roadV, r, 0, 0, 1, 6, ROAD.edge);
       ctx.p(roadV, r, 17, 0, 1, 6, ROAD.edge);
-      if (j % 2 === 0 && (j < ROAD_ROW || j > ROAD_ROW + 1)) ctx.p(roadV, r, 9, 1, 1, 4, ROAD.dash);
+      if (crossing) for (let k = 0; k < 3; k++) xing(roadV + k, r, false);
+      else if (j % 2 === 0 && (j < ROAD_ROW || j > ROAD_ROW + 1)) ctx.p(roadV, r, 9, 1, 1, 4, ROAD.dash);
       if (j % 16 === 4) lamp(roadV - 1, r);
       if (j % 16 === 11) lamp(roadV + 3, r);
       if (j % 9 === 2) pole(roadV + 3, r);
@@ -285,20 +330,17 @@ export function paintCommon(ctx: RecipeCtx): void {
         ctx.p(c, roadH, 0, 0, 6, 1, BRIDGE.rail);
         ctx.p(c, roadH, 0, 11, 6, 1, BRIDGE.rail);
         ctx.p(c, roadH, 0, 12, 6, 1, BRIDGE.shadow);
+        for (let k = 0; k < 2; k++) if (mainline.has(`${c},${roadH + k}`)) xing(c, roadH + k, true);
         continue;
       }
-      for (let k = 0; k < 2; k++) {
-        const y = roadH + k,
-          crossing = c === rcol && railRows.has(y);
-        ctx.reserve(c, y, 1, 1);
-        ctx.tr(c, y, 1, 1, ROAD.asphalt);
-        if (crossing) {
-          ctx.p(c, y, 1, 0, 1, 6, RAIL.steel);
-          ctx.p(c, y, 4, 0, 1, 6, RAIL.steel);
-        }
+      const crossing = mainline.has(`${c},${roadH}`) || mainline.has(`${c},${roadH + 1}`);
+      ctx.reserve(c, roadH, 1, 2);
+      ctx.tr(c, roadH, 1, 2, ROAD.asphalt);
+      for (let k = 0; k < 2; k++) if (mainline.has(`${c},${roadH + k}`)) xing(c, roadH + k, true);
+      if (!crossing) {
+        ctx.p(c, roadH, 0, 0, 6, 1, ROAD.edge);
+        if (i % 2 === 0) ctx.p(c, roadH, 2, 6, 3, 1, ROAD.dashEW);
       }
-      if (c !== rcol || !railRows.has(roadH)) ctx.p(c, roadH, 0, 0, 6, 1, ROAD.edge);
-      if (i % 2 === 0 && c !== rcol) ctx.p(c, roadH, 2, 6, 3, 1, ROAD.dashEW);
       if (i % 16 === 4) lamp(c, roadH - 1);
     } else if (start >= 0) {
       ctx.feat.road([start, roadH + 0.5], [c - 1, roadH + 0.5], 2);
