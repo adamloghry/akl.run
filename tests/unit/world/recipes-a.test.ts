@@ -29,7 +29,7 @@ const landy = (cx: number, cy: number) => world.landFracAt(cx, cy) >= 0.9;
 function run(kind: DistrictKind, cx: number, cy: number) {
   const { ctx, raster, base } = makeRecipeCtx(world, cx, cy, kind);
   paintTerrain(ctx, base);
-  paintCommon(ctx, base);
+  paintCommon(ctx);
   RECIPES[kind](ctx);
   return { f: ctx.feat.features, data: raster.data };
 }

@@ -323,7 +323,7 @@ export class World implements WorldQuery, WorldOverlay {
   paintRaster(cx: number, cy: number): { raster: Raster; features: Features; kind: DistrictKind } {
     const { ctx, raster, base } = makeRecipeCtx(this, cx, cy);
     paintTerrain(ctx, base);
-    paintCommon(ctx, base);
+    paintCommon(ctx);
     RECIPES[ctx.kind](ctx);
     return { raster, features: ctx.feat.features, kind: ctx.kind };
   }

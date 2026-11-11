@@ -509,6 +509,54 @@ export function inLandTile(tx: number, ty: number): boolean {
   return crossings(EDGES, tx, ty);
 }
 
+/** Tile bounding box of the land polygon (nothing outside it is land). */
+export const LAND_TILES = (() => {
+  let tx0 = Infinity,
+    ty0 = Infinity,
+    tx1 = -Infinity,
+    ty1 = -Infinity;
+  for (let e = 0; e < EDGES.length; e += 2) {
+    tx0 = Math.min(tx0, EDGES[e]);
+    tx1 = Math.max(tx1, EDGES[e]);
+    ty0 = Math.min(ty0, EDGES[e + 1]);
+    ty1 = Math.max(ty1, EDGES[e + 1]);
+  }
+  return { tx0, ty0, tx1, ty1 };
+})();
+
+const ROWS = new Map<number, Float64Array>();
+/** Sorted x where the polygon crosses the line through tile row `ty`'s centres (same formula as crossings). */
+function rowCrossings(ty: number): Float64Array {
+  let xs = ROWS.get(ty);
+  if (xs) return xs;
+  const y = ty + 0.5,
+    out: number[] = [];
+  for (let e = 0; e < EDGES.length; e += 4) {
+    const x1 = EDGES[e],
+      y1 = EDGES[e + 1],
+      x2 = EDGES[e + 2],
+      y2 = EDGES[e + 3];
+    if (y1 > y !== y2 > y) out.push(x1 + ((y - y1) / (y2 - y1)) * (x2 - x1));
+  }
+  xs = Float64Array.from(out).sort();
+  ROWS.set(ty, xs);
+  return xs;
+}
+
+/** Whether tile (tx, ty) is land: identical to the chunk land mask, but O(log E) per tile after a row's first use. */
+export function landAtTile(tx: number, ty: number): boolean {
+  const xs = rowCrossings(ty),
+    x = tx + 0.5;
+  let lo = 0,
+    hi = xs.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (xs[mid] > x) hi = mid;
+    else lo = mid + 1;
+  }
+  return (xs.length - lo) % 2 === 1;
+}
+
 export const DOWNTOWN: [number, number] = toTile(-122.335, 47.607);
 
 // Waypoint region: Ballard/Fremont edge to Georgetown, Magnolia bluff to the lake (~7 x 8 chunks).
