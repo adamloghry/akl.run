@@ -34,7 +34,9 @@ describe("Journal", () => {
     j.runStart("0x00c0ffee", "?seed=0x00c0ffee");
     expect(ol.querySelector("[data-log-static]")).toBeNull();
     expect(ol.children[0].hasAttribute("data-log-pinned")).toBe(true);
-    expect(ol.children[1].textContent).toBe("# ?seed=0x00c0ffee · r to reroll · m for project list");
+    expect(ol.children[1].textContent).toBe(
+      "# ?seed=0x00c0ffee · r to reroll · m for project list · s to superminimize this window",
+    );
     expect(ol.children[1].querySelector("a.permalink")!.getAttribute("href")).toBe("?seed=0x00c0ffee");
     j.runStart("0x1", "?seed=0x1");
     expect(ol.querySelectorAll(".log-line--comment").length).toBe(2);

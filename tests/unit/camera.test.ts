@@ -29,6 +29,26 @@ describe("Cam", () => {
     expect(Math.abs(c.x - target.x)).toBeLessThan(20);
     expect(c.zoom).toBeGreaterThan(2.4);
   });
+  it("starts moving gently and never exceeds its cruise speed", () => {
+    const c = new Cam(fakeWorld(), seqRand(), { phone: false });
+    c.setViewport(1440, 900, 1);
+    c.lookAt({ x: c.x + 3000, y: c.y - 1200 });
+    let px = c.x,
+      py = c.y,
+      first = -1,
+      top = 0;
+    for (let i = 0; i < 300; i++) {
+      c.update(0.1, i * 0.1, []);
+      const v = Math.hypot(c.x - px, c.y - py) / 0.1;
+      if (first < 0) first = v;
+      top = Math.max(top, v);
+      px = c.x;
+      py = c.y;
+    }
+    expect(first).toBeLessThan(10); // world px/s on the first frame: no snap from rest
+    expect(top).toBeLessThanOrEqual(95 + 1e-6);
+    expect(top).toBeGreaterThan(80);
+  });
   it("lookAt lingers", () => {
     const c = new Cam(fakeWorld(), seqRand(), { phone: false });
     c.setViewport(1440, 900, 1);

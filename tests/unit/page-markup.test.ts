@@ -14,7 +14,7 @@ describe.skipIf(!built)("index.html contract", () => {
       "main#windows",
       "#hub-window[data-windows]",
       "[data-minimize]",
-      "[data-restore]",
+      "[data-journal]",
       "[data-readout][hidden]",
       "[data-readout-text]",
       "[data-log]",

@@ -83,7 +83,7 @@ describe.skipIf(!built)("page driver", () => {
     expect(root.classList.contains("factory")).toBe(false);
     expect($("[data-readout]").getAttribute("aria-pressed")).toBe("false");
   });
-  it("minimize and restore clicks move focus", () => {
+  it("minimize moves focus to the readout; the readout restores and keeps focus", () => {
     const root = document.documentElement;
     const hub = $("#hub-window") as HTMLElement & { inert: boolean };
     $("[data-minimize]").focus();
@@ -91,10 +91,27 @@ describe.skipIf(!built)("page driver", () => {
     expect(root.classList.contains("factory")).toBe(true);
     expect(hub.inert).toBe(true);
     expect(document.activeElement).toBe($("[data-readout]"));
-    $("[data-restore]").click();
+    $("[data-readout]").click();
     expect(root.classList.contains("factory")).toBe(false);
     expect(hub.inert).toBe(false);
-    expect(document.activeElement).toBe($("[data-minimize]"));
+    expect(document.activeElement).toBe($("[data-readout]"));
+  });
+  it("s superminimizes (journal too), toggles back, and m clears it", () => {
+    const root = document.documentElement;
+    const journal = $("[data-journal]") as HTMLElement & { inert: boolean };
+    key("s");
+    expect(root.classList.contains("factory")).toBe(true);
+    expect(root.classList.contains("superminimized")).toBe(true);
+    expect(journal.inert).toBe(true);
+    key("s");
+    expect(root.classList.contains("factory")).toBe(true);
+    expect(root.classList.contains("superminimized")).toBe(false);
+    expect(journal.inert).toBe(false);
+    key("s");
+    key("m");
+    expect(root.classList.contains("factory")).toBe(false);
+    expect(root.classList.contains("superminimized")).toBe(false);
+    expect(journal.inert).toBe(false);
   });
   it("journal holds the pin and the run-start comment", () => {
     const lines = [...document.querySelectorAll("[data-log] .log-line--comment")];

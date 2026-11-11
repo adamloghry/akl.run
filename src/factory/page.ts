@@ -96,7 +96,7 @@ function init(): void {
   const readout = q("[data-readout]");
   const readoutText = q("[data-readout-text]") ?? readout;
   const minimizeEl = q("[data-minimize]");
-  const restoreEl = q("[data-restore]");
+  const journalEl = q("[data-journal]");
   const statEls = [...document.querySelectorAll<HTMLElement>("[data-prod] [data-stat]")];
   if (!canvas || !ctx) return;
 
@@ -151,29 +151,42 @@ function init(): void {
     sim.env.raining = rain;
   };
 
-  // ---- hub / factory ----
+  // ---- hub / factory / superminimized ----
   const isFactory = (): boolean => root.classList.contains("factory");
-  function setMode(mode: "hub" | "factory", opts: { focusMinimize?: boolean } = {}): void {
+  const isSuper = (): boolean => root.classList.contains("superminimized");
+  /** Before hiding `el`, move focus out of it to the readout (or just drop it). */
+  const evacuate = (el: Element | null): void => {
+    if (!el?.contains(document.activeElement)) return;
+    if (readout) {
+      readout.hidden = false;
+      shown = true;
+      readout.focus();
+    } else (document.activeElement as HTMLElement).blur();
+  };
+  const setInert = (el: Element | null, on: boolean): void => {
+    if (!el) return;
+    const h = el as HTMLElement & { inert?: boolean };
+    const native: boolean = "inert" in (h as object);
+    h.inert = on;
+    if (!native) {
+      if (on) el.setAttribute("inert", "");
+      else el.removeAttribute("inert");
+    }
+  };
+  /** Superminimize: the journal goes too (factory mode only; leaving factory mode clears it). */
+  function setSuper(on: boolean): void {
+    if (on && !isFactory()) setMode("factory");
+    if (on) evacuate(journalEl);
+    root.classList.toggle("superminimized", on);
+    setInert(journalEl, on);
+  }
+  function setMode(mode: "hub" | "factory"): void {
     const on = mode === "factory";
-    if (on && hubWin?.contains(document.activeElement)) {
-      if (readout) {
-        readout.hidden = false;
-        shown = true;
-        readout.focus();
-      } else (document.activeElement as HTMLElement).blur();
-    }
+    if (on) evacuate(hubWin);
+    else if (isSuper()) setSuper(false);
     root.classList.toggle("factory", on);
-    if (hubWin) {
-      const el = hubWin as HTMLElement & { inert?: boolean };
-      const native: boolean = "inert" in (el as object);
-      el.inert = on;
-      if (!native) {
-        if (on) hubWin.setAttribute("inert", "");
-        else hubWin.removeAttribute("inert");
-      }
-    }
+    setInert(hubWin, on);
     readout?.setAttribute("aria-pressed", on ? "true" : "false");
-    if (!on && opts.focusMinimize) minimizeEl?.focus();
     if (on && idle) {
       idle = false;
       wake();
@@ -368,14 +381,11 @@ function init(): void {
     const k = (e.key || "").toLowerCase();
     if (k === "r") reroll();
     else if (k === "m") setMode(isFactory() ? "hub" : "factory");
+    else if (k === "s") setSuper(!(isFactory() && isSuper()));
   });
   minimizeEl?.addEventListener("click", (e) => {
     e.preventDefault();
     setMode("factory");
-  });
-  restoreEl?.addEventListener("click", (e) => {
-    e.preventDefault();
-    setMode("hub", { focusMinimize: true });
   });
   readout?.addEventListener("click", () => setMode(isFactory() ? "hub" : "factory"));
   canvas.addEventListener("click", (e) => {
@@ -486,6 +496,7 @@ function init(): void {
         idle,
         reduced,
         factory: isFactory(),
+        superminimized: isSuper(),
         W,
         H,
         dpr,
@@ -509,6 +520,7 @@ function init(): void {
     reroll,
     minimize: (b: boolean) => setMode(b ? "factory" : "hub"),
     setMode: (m: "hub" | "factory") => setMode(m),
+    superminimize: (b: boolean) => setSuper(b),
     renderNow,
     World,
     Cam,

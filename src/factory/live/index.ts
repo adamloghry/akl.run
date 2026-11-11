@@ -46,14 +46,19 @@ export class Live implements LivePush {
     this.particles.update(ctx);
   }
 
-  /** Everything under the event machines: belts, inserters, machines, water, bots, particles. */
+  /** Everything under the event machines: belts, inserters, machines, water, bots, ground particles. */
   drawBelow(g: CanvasRenderingContext2D, d: DrawCtx, f: Features): void {
     this.belts.draw(g, d, f);
     this.inserters.draw(g, d, f);
     this.machines.draw(g, d, f);
     this.water.draw(g, d, f);
     this.bots.draw(g, d, f);
-    this.particles.draw(g, d, f);
+    this.particles.draw(g, d, f, "ground");
+  }
+
+  /** Over the event machines (trains, cars, pads, lots): smoke, steam, puffs, dust, embers. */
+  drawAbove(g: CanvasRenderingContext2D, d: DrawCtx, f: Features): void {
+    this.particles.draw(g, d, f, "air");
   }
 
   drawLights(g: CanvasRenderingContext2D, d: DrawCtx, f: Features, queued: LightSource[]): void {

@@ -24,10 +24,10 @@ export async function run(browser) {
       return el ? getComputedStyle(el).visibility : "missing";
     });
     if (vis !== "hidden") fail(`factory host: #hub-window visibility is ${vis} at load`);
-    await page.evaluate(() => document.querySelector("[data-restore]")?.focus());
+    await page.evaluate(() => document.querySelector("[data-readout]")?.focus());
     await page.keyboard.press("Enter");
     await page.waitForTimeout(800);
-    if (await isFactory(page)) fail("factory host: Enter on [data-restore] did not show the hub");
+    if (await isFactory(page)) fail("factory host: Enter on [data-readout] did not show the hub");
     await context.close();
   }
   for (const [url, want] of [

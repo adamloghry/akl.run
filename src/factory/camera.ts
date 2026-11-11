@@ -12,8 +12,15 @@ import {
 } from "./core/types";
 import { CENTRAL_BOX, DOWNTOWN, toGeo } from "./world/geo";
 
-const SCAN = 3; // chunks
+const SCAN = 5; // chunks
+const MIN_HOP = 2; // Chebyshev chunks a waypoint prefers to be from the camera (nearer only as a fallback)
 const RECENT = 4; // waypoint kinds remembered
+// Motion: velocity eases toward `rate * distance`, capped at `max` (world px/s) and limited to
+// `rate * max` px/s^2 of acceleration, so a move starts gently and the exponential tail never
+// needs more braking than it has (no overshoot). Event targets travel faster.
+const ROAM = { rate: 0.32, max: 95 };
+const EVENT = { rate: 0.9, max: 170 };
+const DWELL: [number, number] = [7, 12]; // s spent at a waypoint once there
 
 /** The roaming camera: POI waypoints, event holds, look-at linger. World px throughout. */
 export class Cam implements CamState {
@@ -26,6 +33,8 @@ export class Cam implements CamState {
   private base: number;
   private tx = this.x;
   private ty = this.y;
+  private vx = 0;
+  private vy = 0;
   private linger = 0;
   private zOff = 0;
   private vw = 1;
@@ -84,6 +93,7 @@ export class Cam implements CamState {
   reset(): void {
     this.x = this.tx = DOWNTOWN[0] * T;
     this.y = this.ty = DOWNTOWN[1] * T;
+    this.vx = this.vy = 0;
     this.linger = 0;
     this.zOff = 0;
     this.recent = [];
@@ -119,15 +129,35 @@ export class Cam implements CamState {
       this.linger -= dt;
       if (this.linger <= 0) {
         this.pickWaypoint();
-        this.linger = this.rand.range(9, 15);
+        // travel time (accelerate, cruise, settle) plus a dwell, so long hops still get looked at
+        const d = Math.hypot(this.tx - this.x, this.ty - this.y);
+        this.linger = d / ROAM.max + 1 / ROAM.rate + this.rand.range(...DWELL);
       }
     }
-    const k = 1 - Math.exp(-(top?.target ? 0.9 : 0.32) * dt);
-    this.x += (this.tx - this.x) * k;
-    this.y += (this.ty - this.y) * k;
+    this.glide(dt, top?.target ? EVENT : ROAM);
     this.zOff += (zsum - this.zOff) * (1 - Math.exp(-0.8 * dt));
     this.zoom = this.base * (1 + 0.04 * Math.sin(0.11 * t) + this.zOff);
     this.view = this.makeView();
+  }
+
+  /** Ease the velocity toward the target: capped speed, capped acceleration, no snap from rest. */
+  private glide(dt: number, m: { rate: number; max: number }): void {
+    const dx = this.tx - this.x,
+      dy = this.ty - this.y,
+      d = Math.hypot(dx, dy);
+    const s = d > 1e-6 ? Math.min(m.max, m.rate * d) / d : 0;
+    const ax = dx * s - this.vx,
+      ay = dy * s - this.vy,
+      a = Math.hypot(ax, ay),
+      lim = m.rate * m.max * dt;
+    const f = a > lim ? lim / a : 1;
+    this.vx += ax * f;
+    this.vy += ay * f;
+    // never step past the target in one frame (large clamped dt after a long first draw)
+    const step = Math.hypot(this.vx, this.vy) * dt;
+    const g = step > d ? d / step : 1;
+    this.x += this.vx * dt * g;
+    this.y += this.vy * dt * g;
   }
 
   private makeView(): View {
@@ -182,7 +212,9 @@ export class Cam implements CamState {
     this.picks++;
     const ccx = Math.floor(this.x / CPX),
       ccy = Math.floor(this.y / CPX);
+    // nearest chunk of each kind, ignoring hops shorter than MIN_HOP unless that kind has nothing farther
     const best = new Map<DistrictKind, { cx: number; cy: number; d: number }>();
+    const near = new Map<DistrictKind, { cx: number; cy: number; d: number }>();
     for (let dy = -SCAN; dy <= SCAN; dy++)
       for (let dx = -SCAN; dx <= SCAN; dx++) {
         if (!dx && !dy) continue;
@@ -191,10 +223,12 @@ export class Cam implements CamState {
         if (!this.inBox(cx, cy)) continue;
         const kind = this.world.kindAt(cx, cy);
         if (kind === "wild") continue;
+        const into = Math.max(Math.abs(dx), Math.abs(dy)) >= MIN_HOP ? best : near;
         const d = dx * dx + dy * dy,
-          cur = best.get(kind);
-        if (!cur || d < cur.d) best.set(kind, { cx, cy, d });
+          cur = into.get(kind);
+        if (!cur || d < cur.d) into.set(kind, { cx, cy, d });
       }
+    for (const [kind, b] of near) if (!best.has(kind)) best.set(kind, b);
     // The world is infinite, so no clamp is needed on waypoints.
     let pick: DistrictKind | null = null;
     if (this.pref && !best.has(this.pref)) {

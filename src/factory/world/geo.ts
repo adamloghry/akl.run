@@ -511,8 +511,9 @@ export function inLandTile(tx: number, ty: number): boolean {
 
 export const DOWNTOWN: [number, number] = toTile(-122.335, 47.607);
 
-const cA = toTile(-122.36, 47.62),
-  cB = toTile(-122.3, 47.59);
+// Waypoint region: Ballard/Fremont edge to Georgetown, Magnolia bluff to the lake (~7 x 8 chunks).
+const cA = toTile(-122.39, 47.65),
+  cB = toTile(-122.28, 47.565);
 export const CENTRAL_BOX = {
   tx0: Math.min(cA[0], cB[0]),
   ty0: Math.min(cA[1], cB[1]),

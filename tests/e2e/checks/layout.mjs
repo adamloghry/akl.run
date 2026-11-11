@@ -38,7 +38,7 @@ const FACTORY_SIZES = [
   [390, 844],
 ];
 
-/** Factory-mode chrome: rects of the fg chip, prod line, journal panel, comment lines and readout. */
+/** Factory-mode chrome: rects of the prod line, journal panel, comment lines and readout. */
 function measureFactory() {
   const box = (sel) => {
     const el = document.querySelector(sel);
@@ -48,7 +48,6 @@ function measureFactory() {
     return { x: r.left, y: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height };
   };
   return {
-    fg: box(".fg"),
     prod: box(".prod"),
     status: box(".status"),
     readout: box("[data-readout]"),
@@ -68,9 +67,7 @@ async function factoryChecks(browser, fail, notes) {
     await page.waitForTimeout(1200);
     const m = await page.evaluate(measureFactory);
     const tag = `factory ${w}x${h}`;
-    if (!m.fg) fail(`${tag}: .fg missing`);
     if (m.prod) {
-      if (hit(m.fg, m.prod)) fail(`${tag}: .prod overlaps .fg`);
       if (m.prod.x < 0 || m.prod.r > m.iw)
         fail(`${tag}: .prod outside the viewport (${m.prod.x}..${m.prod.r})`);
     }
@@ -78,7 +75,6 @@ async function factoryChecks(browser, fail, notes) {
     if (m.status) {
       for (const c of m.comments) if (c.cut) fail(`${tag}: comment line truncated: "${c.text}"`);
       if (hit(m.status, m.readout)) fail(`${tag}: journal overlaps the readout`);
-      if (hit(m.status, m.fg)) fail(`${tag}: journal overlaps .fg`);
       if (m.status.x < 0 || m.status.r > m.iw) fail(`${tag}: journal outside the viewport`);
     } else fail(`${tag}: journal missing`);
     if (w === 390) {
