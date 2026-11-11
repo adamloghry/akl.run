@@ -68,7 +68,8 @@ SHA-256>` for fixed-URL files under `public/`. Only `boot.js` uses it
 | `core/types.ts` | the frozen contracts (`Features`, `RecipeCtx`, `SimCtx`, `EventMachine`, `Stats`, `T=6`, `CH=32`, `CPX=192`, `AP=3`, …) |
 | `world/geo.ts` | Seattle polygon, land mask, shore distance, tile↔lat/lon, `DOWNTOWN`, `CENTRAL_BOX` |
 | `world/palette.ts`, `sprites.ts` | colours; structure painters drawing onto a `Raster` |
-| `world/terrain.ts` | `chunkBase`, `baseKind` (kind dice), ground painting, shared rail/road corridors |
+| `world/terrain.ts` | `chunkBase`, `baseKind` (kind dice), ground painting, the rail mainline and the painted road network (bridges, level crossings, nest rubble) |
+| `world/roads.ts` | the connected road network: land lattice, short-bridge rule, per-seed paved edges, spare edges biters may break |
 | `world/recipes/*.ts` | one recipe per district kind: `wild mine smelt asm power hub outpost nest labs solar oil storage silo` (+ `bank.ts` shared helpers) |
 | `world/pairing.ts` | pure nest/outpost pairing (`nestCandidate`, `pairedOutpost`) |
 | `world/overlay.ts` | the one sanctioned Canvas2D user in `world/`: epoch-checked `saveRect`/`paint`/`restore` (the construction lot) |
@@ -307,7 +308,8 @@ k++)`, and the named salts (`seed + n`) are: `1` water/sand noise, `2`
 grass/dirt noise, `3` trees (a tree where it is > .34, dark > .58), `4`/`8`
 ore noise, `5` ore kind, `500` the industrial die (16 faces), `504` silo
 override (1/8), `506` forest override (1/10), `510` nest roll (1/4),
-`520`/`521` road flags, `610` furnace variant, `670`–`673` nest creep/spawners,
+`520` road joiner order, `521` E-W road pick (1/4), `530` road rubble,
+`531` which nest arm biters break first, `610` furnace variant, `670`–`673` nest creep/spawners,
 `680` labs, `690`/`691` solar, `700`/`701` oil. Adding, removing or reordering
 an `rnd()` call, or changing a salt, changes every chunk of every seed and
 invalidates every shared `?seed=` permalink; pixel-art painters are frozen
@@ -328,6 +330,32 @@ faces. A unit test requires hub, silo and a nest+outpost pair within reach on
 ≥ 18 of 20 seeds, and no industrial kind above 40% of non-wild chunks. These
 numbers changed the world for every seed once, before the look was frozen;
 now they are frozen too.
+
+**Road network** (`world/roads.ts`, pure; painted by `terrain.paintCommon`).
+Roads are one connected network, not per-chunk corridors. It is a lattice
+with one node per chunk at the junction of the 3-wide N-S highway (tile
+columns 14–16) and the 2-wide E-W connector (rows 15–16). An edge is
+passable when both nodes are land and no water run along it exceeds
+`MAX_BRIDGE` (6 tiles, ≈ 220 m: enough for the Ship Canal at its narrowest,
+nothing like Lake Union); that run is painted as a plank bridge. Only the
+largest passable component gets roads (with 6 it joins North Seattle; 143 of
+144 land nodes), so isolated scraps of land get none rather than an orphan
+road. The land lattice is pure geography, built once from
+`geo.landAtTile` (a per-row crossing cache that matches the chunk mask
+exactly). Per seed, every passable N-S edge is paved, plus 1/4 of the E-W
+edges (salt 521), plus, lowest salt-520 hash first, any E-W edge that joins
+two still-separate parts (Kruskal), so the paved graph spans the component.
+E-W roads cross the mainline on level crossings (rails painted over the
+asphalt). **Biters** break at most one road per nest chunk: a 5-tile rubble
+gap on one junction arm (salt 531 picks which arm to try first), and only on
+an arm whose edge is *spare*, meaning off a spanning tree of the paved
+network. So every remaining road still connects, and each break leaves two
+dead-end stubs (0–2 breaks per seed in practice).
+`tests/unit/world/roads.test.ts` paints every land chunk for several seeds
+and requires the painted segments to form exactly one component. It also
+checks that every paved edge's water run is within `MAX_BRIDGE`. Don't give
+up that test to make a recipe fit; recipes must route around reserved road
+tiles (`ctx.free`).
 
 **Nest/outpost pairing** (`world/pairing.ts`, pure and bounded). A chunk with
 land ≥ .6 whose base kind is not `hub`, `silo` or `mine` is a *nest candidate*

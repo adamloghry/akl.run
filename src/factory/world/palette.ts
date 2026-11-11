@@ -50,6 +50,8 @@ export const WALL = { base: "#8e969c", seam: "#6b7378", top: "#b4bcc1" };
 export const TURRET = { base: "#5b6064", body: "#6a6f73", barrel: "#3a3e42" };
 export const PIPE = { body: "#8a8f95", hi: "#aab0b6" };
 export const RAIL = { bed: "#6a625a", tie: "#4e3d2a", steel: "#b4b8bc" };
+export const ROAD = { asphalt: "#4b4a45", edge: "#5a5952", dash: "#d9b420", dashEW: "#8a8780" };
+export const BRIDGE = { deck: "#6e604c", seam: "#5a4e3d", rail: "#a89d86", shadow: "#0f2a35" };
 export const ROBOPORT = {
   base: "#4c5055",
   body: "#5d6166",

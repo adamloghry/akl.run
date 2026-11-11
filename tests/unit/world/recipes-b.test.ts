@@ -44,7 +44,7 @@ function run(kind: DistrictKind, cx: number, cy: number) {
   const w = world();
   const { ctx, raster, base } = makeRecipeCtx(w, cx, cy, kind);
   paintTerrain(ctx, base);
-  paintCommon(ctx, base);
+  paintCommon(ctx);
   RECIPES[kind](ctx);
   return { raster, f: ctx.feat.features };
 }
