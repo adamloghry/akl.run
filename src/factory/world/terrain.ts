@@ -68,9 +68,11 @@ const DICE: readonly DistrictKind[] = [
  *   1 water/sand noise   2 grass-vs-dirt noise   3 tree noise
  *   4, 8 ore vnoise      5 ore kind hash
  *   500 industrial die (16 faces)   504 silo override (1/8 of industrial chunks)
+ *   506 forest override (1/10 of industrial chunks without a mine's ore are left wild)
  *   510 nest roll (1/4, in world.ts)   520/521 road flags (terrain.paintCommon, via ctx.h)
  * Bands: landFrac < .35 wild; .35 <= landFrac < .6 mine (ore > 90) or outpost; >= .6 industrial.
  */
+const FOREST_P = 1 / 10;
 /** Steps 1-2 of kind selection: land fraction, ore and the hashed die (no nest/outpost overrides). */
 export function baseKind(b: ChunkBase, seed: number): DistrictKind {
   if (b.landFrac < 0.35) return "wild";
@@ -78,6 +80,7 @@ export function baseKind(b: ChunkBase, seed: number): DistrictKind {
   let pick = DICE[Math.floor(hash(b.cx, b.cy, seed + 500) * 16)];
   if (hash(b.cx, b.cy, seed + 504) < 1 / 8) pick = "silo";
   if (b.oreCount > 180 || (b.oreCount > 60 && pick === "mine")) return "mine";
+  if (hash(b.cx, b.cy, seed + 506) < FOREST_P) return "wild";
   return pick === "mine" ? "asm" : pick;
 }
 
@@ -136,7 +139,7 @@ export function paintTerrain(ctx: RecipeCtx, b: ChunkBase): void {
       );
       if (g >= 0.3) {
         const tn = noise(x, y, s + 3);
-        if (tn > 0.4) S.tree(ctx, x, y, tn > 0.6);
+        if (tn > 0.34) S.tree(ctx, x, y, tn > 0.58);
         else if (h2 > 0.994) S.rock(ctx, x, y);
       } else if (h2 > 0.985) S.deadTree(ctx, x, y);
     }

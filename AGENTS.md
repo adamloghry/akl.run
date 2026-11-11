@@ -211,8 +211,9 @@ changes golden.**
   command `npx wrangler deploy`, path `/` (the repo root, not an output
   directory: `dist/` doesn't exist until the build runs). It runs on
   Cloudflare's image with npm, outside nix. Pushes to `trunk` go to
-  production; other branches get preview versions (`wrangler versions
-  upload`).
+  production; other branches run the non-production deploy command `npx
+  wrangler preview`, which fails unless `wrangler.jsonc` has a `previews`
+  block (an empty `{}` is enough; keep it).
 - **`wrangler.jsonc` must stay.** It points `assets.directory` at `./dist`,
   so wrangler uploads the static build and nothing else. Without it
   wrangler autoconfigures the repo: `astro add cloudflare`, then a rebuild
@@ -257,11 +258,18 @@ changes golden.**
 State `factory` (a class on `<html>`) is the only state carrier; `.is-minimized`
 is not used. `boot.js` sets it before first paint. It minimises the hub
 (`opacity/transform/visibility` transition + `inert` on `.hub`, with focus
-moved to the readout first if it was inside) and shows `.fg` (`[data-restore]`),
-`.prod` (`[data-prod]`, shown only at >= 1100 px wide; it would meet `.fg` below that) and the journal. `[data-readout]`
+moved to the readout first if it was inside) and shows `.prod` (`[data-prod]`,
+shown only at >= 1100 px wide) and the journal. `[data-readout]`
 mirrors it with `aria-pressed` (its `aria-label` is constant, and it has
 `aria-controls="hub-window"`). Toggles: the `factory` row (`[data-minimize]`),
-the readout, and `m`; `% fg` restores and moves focus to the `factory` link.
+the readout, and `m`; restoring leaves focus where it is. There is no
+top-left `% fg` chip any more (removed 2026-11-10); the readout is the
+visible way back. **Superminimize** (`s`, a second `html.superminimized`
+class, only meaningful with `factory`): the journal (`[data-journal]`) leaves
+with the hub's own transition and gets `inert` (focus inside it moves to the
+readout). `s` from hub mode goes straight to factory + superminimized; `s`
+again brings the journal back; leaving factory mode clears it. Touch has no
+`s` (no keyboard), like reroll.
 The first row's whole surface is one stretched `<a>`; the word *Factorio*
 in it is a second, raised `<a>`. JS-off: the four project links work and the
 readout, hint and journal stay hidden. The first frame on a `factory.*` host is
@@ -273,7 +281,7 @@ already factory mode.
 `src/factory/`; hooks into the markup are all null-guarded so a missing hook
 degrades rather than throws (`#map`, `[data-windows]`, `[data-log]`,
 `[data-log-static]`, `[data-readout]` + `[data-readout-text]`, `[data-minimize]`,
-`[data-restore]`, `[data-prod] [data-stat]`). `page.ts` wraps start-up in a
+`[data-journal]`, `[data-prod] [data-stat]`). `page.ts` wraps start-up in a
 try/catch and the frame step in a log-once-and-stop catch, so an engine error
 leaves the hub fully usable.
 
@@ -296,8 +304,9 @@ across browsers.
 
 **`rnd()`/salt order is sacred.** `chunkRng` is `hash(cx, cy, seed + 1000 +
 k++)`, and the named salts (`seed + n`) are: `1` water/sand noise, `2`
-grass/dirt noise, `3` trees, `4`/`8` ore noise, `5` ore kind, `500` the
-industrial die (16 faces), `504` silo override (1/8), `510` nest roll (1/4),
+grass/dirt noise, `3` trees (a tree where it is > .34, dark > .58), `4`/`8`
+ore noise, `5` ore kind, `500` the industrial die (16 faces), `504` silo
+override (1/8), `506` forest override (1/10), `510` nest roll (1/4),
 `520`/`521` road flags, `610` furnace variant, `670`–`673` nest creep/spawners,
 `680` labs, `690`/`691` solar, `700`/`701` oil. Adding, removing or reordering
 an `rnd()` call, or changing a salt, changes every chunk of every seed and
@@ -306,13 +315,15 @@ alongside it. If the sequence must change, re-approve the look, don't diff it.
 
 **Kind dice (retuned, and why).** A chunk is ≈ 1.2 km and Seattle has only
 about 200 land chunks, yet events need specific districts (hub, silo, nest +
-outpost) inside the *reachable area*: `CENTRAL_BOX` (47.59–47.62 N,
-122.30–122.36 W, ≈ 3.7×2.7 chunks) plus Chebyshev distance 4 around the
-camera. `baseKind` (terrain.ts): land fraction < .35 → `wild`; .35 ≤ land
+outpost) inside the *reachable area*: `CENTRAL_BOX` (47.565–47.65 N,
+122.28–122.39 W, ≈ 6.7×7.7 chunks; widened 2026-11-10 from 47.59–47.62 N,
+122.30–122.36 W so the camera covers more ground) plus Chebyshev distance 4
+around the camera. `baseKind` (terrain.ts): land fraction < .35 → `wild`; .35 ≤ land
 < .6 → `mine` if ore > 90 else `outpost`; land ≥ .6 → one of 16 die faces
 (`smelt asm power hub asm smelt mine asm labs solar oil storage power smelt asm
 hub`), overridden to `silo` 1/8 of the time, and to `mine` if ore > 180 (or
-> 60 on a `mine` face); remaining `mine` faces become `asm`. Hubs are 2 of 16
+> 60 on a `mine` face); remaining `mine` faces become `asm`; then 1/10 of
+the non-mine results are left `wild` as forest (salt 506). Hubs are 2 of 16
 faces. A unit test requires hub, silo and a nest+outpost pair within reach on
 ≥ 18 of 20 seeds, and no industrial kind above 40% of non-wild chunks. These
 numbers changed the world for every seed once, before the look was frozen;
@@ -369,10 +380,16 @@ after eviction, so stale pixels can never be restored; the regenerated chunk
 is the pure empty lot. Event timing and motion use `core/rng` + the sim clock
 only; they never touch the chunk salt sequence.
 
-**Camera** (`camera.ts`). Starts at downtown (47.607 N, 122.335 W) and, every
-9–15 s, picks a waypoint: the nearest chunk of each non-`wild` kind within
-3 chunks *and inside `CENTRAL_BOX`* (not one of the last 4 kinds), else a
-random ≥ 60%-land point in the box, else downtown. `prefer(kind)` (one-shot)
+**Camera** (`camera.ts`). Starts at downtown (47.607 N, 122.335 W) and picks a
+waypoint: the nearest chunk of each non-`wild` kind within 5 chunks *and
+inside `CENTRAL_BOX`*, at least 2 chunks (Chebyshev) away unless that kind has
+nothing farther (not one of the last 4 kinds), else a random ≥ 60%-land point
+in the box, else downtown. The next pick comes after the estimated travel time
+plus a 7–12 s dwell. Motion is a velocity eased toward `rate × distance`,
+capped at `max` world px/s and at `rate × max` px/s² (roam 0.32 / 95, event
+targets 0.9 / 170): it starts from rest without a snap (the old exponential
+lerp moved fastest on its first frame, which read as a jerk on load) and the
+cap on acceleration is enough to settle without overshoot. `prefer(kind)` (one-shot)
 biases the pick toward a needed kind, searching the box farther out; machines
 with a non-null `wants()` take turns at it, the turn passing on every waypoint
 pick (`Cam.picks`), so a kind the camera cannot find never starves the others. Event `camHint`s override with a target and/or
@@ -404,7 +421,7 @@ gets. The change listener rebuilds the sim both ways.
 
 **Keys, pauses, sizing.** `r` rerolls (new random seed, fresh `Sim`, camera
 to downtown, `history.replaceState`, new run-start line); `m` toggles the
-mode; clicking the canvas requests a look. Shortcuts are ignored with
+mode; `s` toggles superminimize; clicking the canvas requests a look. Shortcuts are ignored with
 Ctrl/Meta/Alt/Shift, on repeat/IME composition and inside inputs or
 contenteditable (WCAG 2.1.4). Phone has no reroll (no keyboard); don't add a
 button. `isRunning()` = not hidden, not off-screen (IntersectionObserver), not
@@ -427,10 +444,10 @@ otherwise random per load. `?time=day|dusk|night` pins the night level and
 unknown values are ignored.
 
 **`window.__mapgen`:** `seed`, `seedHex`, `world`, `cam`, `sim`, `state`
-(`running hidden offscreen idle reduced factory W H dpr frames t rain`),
+(`running hidden offscreen idle reduced factory superminimized W H dpr frames t rain`),
 `events` (last 20 journal lines), `machines` (state name per machine),
 `speed` (**a get/set accessor**, the sim-clock multiplier, default 1 — assign
-to it, don't call it), `reroll()`, `minimize(bool)`, `setMode('hub'|'factory')`,
+to it, don't call it), `reroll()`, `minimize(bool)`, `superminimize(bool)`, `setMode('hub'|'factory')`,
 `renderNow()`, `stats()`, `lookAt(x, y)`, `World`, `Cam`, `T`, `CH`, `perf()`
 (`frames first firstDraw n avg p95 max chunks`) and `resetPerf()`. Speeds
 above 1 are for smoke runs only: chunk generation lags the camera and
@@ -556,7 +573,7 @@ Worker; they're fetched only when someone runs them.
   already darkens). The true
   backdrop is the live map under a 50% shade, so the AA numbers hold against
   `--water` but are thinner over the brightest tiles (ore, sand, pale
-  rooftops). Factory-mode chrome (`.fg`, `.prod`) carries only a 1 px ring
+  rooftops). Factory-mode chrome (`.prod`) carries only a 1 px ring
   shadow. Don't remove the shade or the shadow to "clean up" the look.
 - Prettier is `printWidth: 110` for `src/**`, `tests/**`. Run `nix fmt`
   before committing.

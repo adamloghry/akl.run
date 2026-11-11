@@ -14,6 +14,9 @@ export const CAPS: Record<ParticleKind, number> = {
   spark: 40,
 };
 const poolOf = (k: ParticleKind): ParticleKind => (POOLED.includes(k) ? "smoke" : k);
+/** Airborne kinds: drawn above the event machines' sprites so nothing on the ground hides them. */
+const AIR: readonly ParticleKind[] = [...POOLED, "ember"];
+export type ParticleLayer = "ground" | "air" | "all";
 
 interface P {
   kind: ParticleKind;
@@ -157,9 +160,10 @@ export class Particles implements LiveSystem {
     }
   }
 
-  draw(g: CanvasRenderingContext2D, d: DrawCtx, _f?: Features): void {
+  draw(g: CanvasRenderingContext2D, d: DrawCtx, _f?: Features, layer: ParticleLayer = "all"): void {
     const z = d.view.z;
     for (const p of this.ps) {
+      if (layer !== "all" && AIR.includes(p.kind) !== (layer === "air")) continue;
       const fade = p.life > 0 ? Math.min(1, Math.max(0, 1 - p.age / p.life)) : 0;
       const sx = d.sx(p.x),
         sy = d.sy(p.y);

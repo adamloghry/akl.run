@@ -242,6 +242,7 @@ export class Sim {
     const f = this.world.query(this.viewRect(40));
     this.live.drawBelow(g, d, f);
     for (const m of this.m.all) m.draw(g, d);
+    this.live.drawAbove(g, d, f);
     this.live.drawLights(g, d, f, queued);
     this.live.drawRain(g, d, f);
     this.scrim(g, W, H);

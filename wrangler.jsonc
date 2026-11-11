@@ -11,4 +11,7 @@
     "directory": "./dist",
     "not_found_handling": "404-page",
   },
+  // Non-production branches deploy with `npx wrangler preview`, which refuses to run without this
+  // block. It can stay empty: assets and compatibility settings are inherited from the top level.
+  "previews": {},
 }

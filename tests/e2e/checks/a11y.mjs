@@ -57,11 +57,25 @@ export async function run(browser) {
   await page.waitForTimeout(800);
   if (!(await cls())) fail("m did not minimize");
 
-  await page.evaluate(() => document.querySelector("[data-restore]")?.focus());
+  const sup = () => page.evaluate(() => document.documentElement.classList.contains("superminimized"));
+  await page.evaluate(() => document.querySelector("[data-log] a")?.focus());
+  await page.keyboard.press("s");
+  await page.waitForTimeout(800);
+  if (!(await sup())) fail("s did not superminimize");
+  if (!(await active("[data-readout]"))) fail("after superminimize, activeElement is not [data-readout]");
+  const jvis = await page.evaluate(
+    () => getComputedStyle(document.querySelector("[data-journal]")).visibility,
+  );
+  if (jvis !== "hidden") fail(`superminimized journal visibility is ${jvis}`);
+  await page.keyboard.press("s");
+  await page.waitForTimeout(800);
+  if (await sup()) fail("second s did not bring the journal back");
+
+  await page.evaluate(() => document.querySelector("[data-readout]")?.focus());
   await page.keyboard.press("Enter");
   await page.waitForTimeout(800);
-  if (await cls()) fail("Enter on [data-restore] did not restore the hub");
-  if (!(await active("[data-minimize]"))) fail("after restore, activeElement is not [data-minimize]");
+  if (await cls()) fail("Enter on [data-readout] did not restore the hub");
+  if (!(await active("[data-readout]"))) fail("after restore, activeElement is not [data-readout]");
 
   await context.close();
   return { ok, notes };
