@@ -27,3 +27,17 @@ jobs:
 
       - name: Verify devenv shell builds
         run: nix develop --impure --command node --version
+
+      - name: Build for browser properties
+        run: nix develop --impure --command npm run build
+
+      - name: Bombadil browser properties
+        run: nix develop --impure --command npm run test:bombadil
+
+      - name: Upload Bombadil trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bombadil-trace
+          path: tmp/bombadil-*/trace.bin
+          if-no-files-found: ignore

@@ -505,6 +505,14 @@ repaints those). `live/`, `events/` and `camera.ts` use only `core/rng` +
   boundary scan, the placement/reachability tests and page-level jsdom tests.
   It runs in `nix flake check` as the `unit` check.
 - **Build** — `nix flake check --impure` (see Dev environment).
+- **Browser properties (Bombadil)** — `npm run build && npm run test:bombadil`.
+  This serves `dist/` with the production CSP and explores mode switches,
+  keyboard shortcuts, seed rerolls, history navigation and viewport changes
+  for 30 seconds. It checks console/runtime errors, horizontal overflow,
+  mode and accessibility state, and the canvas pixel budget. Set
+  `BOMBADIL_TIME_LIMIT` to run longer. The trace is written to ignored
+  `tmp/bombadil-*/trace.bin`; CI uploads it on failure. `CHROME` or
+  `CHROMIUM` selects a local Chromium binary; otherwise Nix supplies one.
 - **Acceptance (e2e)** — `tests/e2e/`: plain Node + `playwright-core`, own
   `package.json`/lock, **outside nix** and gitignored `node_modules`, so it
   never enters the flake source or the Cloudflare build.
@@ -548,8 +556,8 @@ repaints those). `live/`, `events/` and `camera.ts` use only `core/rng` +
 
 Three flake **apps** (`capture-og`, `optimize-og`, `update-golden`) plus
 `deploy`. The image tools are deliberately not in `packages.default`, `checks`
-or the devShell, so chromium (hundreds of MiB) never lands in CI or the deployed
-Worker; they're fetched only when someone runs them.
+or the devShell. Chromium is fetched separately by the CI Bombadil step, and
+the deployed Worker still contains only the static build.
 
     npm run build                       # capture-og reads dist/, so build first
     nix run .#capture-og                # re-render + optimise public/images/og.png

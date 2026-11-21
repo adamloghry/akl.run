@@ -8,5 +8,6 @@ Astro static site, nix flake dev env, deployed to Cloudflare Workers as static a
     npm run dev
     npm run build
     npm test
+    npm run test:bombadil  # after build; explores browser states for 30 seconds
 
 See [AGENTS.md](AGENTS.md).
