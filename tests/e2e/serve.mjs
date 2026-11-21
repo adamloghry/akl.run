@@ -64,6 +64,7 @@ export async function serve(dir, port) {
     server.listen(port, "127.0.0.1", resolve);
   });
   return {
+    port: server.address().port,
     close: () =>
       new Promise((r) => {
         server.closeAllConnections?.();
