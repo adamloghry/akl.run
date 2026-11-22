@@ -8,6 +8,7 @@ Projects by Adam Loghry, running on top of a small factory: a busy pixel-art fac
 - [16384.dev](https://16384.dev/): Source code behind various projects, including this website and others.
 - [rfc.akl.run](https://rfc.akl.run/): RFCs are cool, more engineers should read them. This is ~all of them, with ISO Plain Language variants.
 - [enchilada.dev](https://enchilada.dev/): I have been trying to make an end-to-end agentic software factory, with varying degrees of success.
+- [loghry.org](https://loghry.org/): Small landing page which shows typical Seattle.
 
 ## The factory
 

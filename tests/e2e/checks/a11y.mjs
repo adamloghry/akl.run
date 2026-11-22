@@ -7,6 +7,7 @@ const ORDER = [
   "https://16384.dev/",
   "https://rfc.akl.run/",
   "https://enchilada.dev/",
+  "https://loghry.org/",
 ];
 
 const describe = () => {

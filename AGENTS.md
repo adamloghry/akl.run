@@ -13,7 +13,7 @@ or extend it); the build plan is in `docs/superpowers/plans/`.
 ## Layout
 
 - `src/pages/index.astro` — the page: markup + head only. The hub (`.hub`,
-  `#hub-window`, `data-windows`) sits inside `<main id="windows">`; four
+  `#hub-window`, `data-windows`) sits inside `<main id="windows">`; five
   project rows ship, three more are commented out until their routes exist.
   `<html class="factory">` is the single state carrier (see "Page states").
   No inline `<script>` and no inline `style=` / `<style>` — see CSP below.
@@ -272,7 +272,7 @@ readout). `s` from hub mode goes straight to factory + superminimized; `s`
 again brings the journal back; leaving factory mode clears it. Touch has no
 `s` (no keyboard), like reroll.
 The first row's whole surface is one stretched `<a>`; the word *Factorio*
-in it is a second, raised `<a>`. JS-off: the four project links work and the
+in it is a second, raised `<a>`. JS-off: the five project links work and the
 readout, hint and journal stay hidden. The first frame on a `factory.*` host is
 already factory mode.
 

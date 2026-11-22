@@ -26,9 +26,9 @@ describe.skipIf(!built)("index.html contract", () => {
     for (const k of ["power", "trains", "bots", "threats", "rockets", "research"])
       expect(doc.querySelector(`[data-prod] [data-stat=${k}]`), k).not.toBeNull();
   });
-  it("lists the four live projects in order with the spec's link order", () => {
+  it("lists the five live projects in order with the spec's link order", () => {
     const names = [...doc.querySelectorAll(".project-name")].map((e) => e.textContent);
-    expect(names).toEqual(["factory", "16384.dev", "rfc.akl.run", "enchilada.dev"]);
+    expect(names).toEqual(["factory", "16384.dev", "rfc.akl.run", "enchilada.dev", "loghry.org"]);
     const links = [...doc.querySelectorAll("#hub-window a")].map((a) => a.getAttribute("href"));
     expect(links).toEqual([
       "https://akl.dev/",
@@ -37,6 +37,7 @@ describe.skipIf(!built)("index.html contract", () => {
       "https://16384.dev/",
       "https://rfc.akl.run/",
       "https://enchilada.dev/",
+      "https://loghry.org/",
     ]);
   });
   it("readout controls the hub", () => {
