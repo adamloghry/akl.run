@@ -19,6 +19,7 @@ export async function run(browser) {
     "https://factorio.com/",
     "https://16384.dev/",
     "https://rfc.akl.run/",
+    "https://journalscope.akl.run/",
     "https://enchilada.dev/",
     "https://loghry.org/",
   ];
