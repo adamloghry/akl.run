@@ -20,6 +20,7 @@ export async function run(browser) {
     "https://16384.dev/",
     "https://rfc.akl.run/",
     "https://enchilada.dev/",
+    "https://loghry.org/",
   ];
   const got = [...new Set(links)].sort();
   if (JSON.stringify(got) !== JSON.stringify([...want].sort()))
