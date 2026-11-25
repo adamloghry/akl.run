@@ -9,6 +9,7 @@ Projects by Adam Loghry, running on top of a small factory: a busy pixel-art fac
 - [rfc.akl.run](https://rfc.akl.run/): RFCs are cool, more engineers should read them. This is ~all of them, with ISO Plain Language variants.
 - [journalscope.akl.run](https://journalscope.akl.run/): Small binary to make journalctl output more useful.
 - [enchilada.dev](https://enchilada.dev/): I have been trying to make an end-to-end agentic software factory, with varying degrees of success.
+- [dune.akl.run](https://dune.akl.run/): The in-universe history of Frank Herbert's Dune, told in pixel art.
 - [loghry.org](https://loghry.org/): Small landing page which shows typical Seattle.
 
 ## The factory

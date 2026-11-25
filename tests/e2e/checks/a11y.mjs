@@ -8,6 +8,7 @@ const ORDER = [
   "https://rfc.akl.run/",
   "https://journalscope.akl.run/",
   "https://enchilada.dev/",
+  "https://dune.akl.run/",
   "https://loghry.org/",
 ];
 

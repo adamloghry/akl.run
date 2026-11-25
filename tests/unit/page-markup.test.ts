@@ -26,7 +26,7 @@ describe.skipIf(!built)("index.html contract", () => {
     for (const k of ["power", "trains", "bots", "threats", "rockets", "research"])
       expect(doc.querySelector(`[data-prod] [data-stat=${k}]`), k).not.toBeNull();
   });
-  it("lists the six live projects in order with the spec's link order", () => {
+  it("lists the seven live projects in order with the spec's link order", () => {
     const names = [...doc.querySelectorAll(".project-name")].map((e) => e.textContent);
     expect(names).toEqual([
       "factory",
@@ -34,6 +34,7 @@ describe.skipIf(!built)("index.html contract", () => {
       "rfc.akl.run",
       "journalscope.akl.run",
       "enchilada.dev",
+      "dune.akl.run",
       "loghry.org",
     ]);
     const links = [...doc.querySelectorAll("#hub-window a")].map((a) => a.getAttribute("href"));
@@ -45,6 +46,7 @@ describe.skipIf(!built)("index.html contract", () => {
       "https://rfc.akl.run/",
       "https://journalscope.akl.run/",
       "https://enchilada.dev/",
+      "https://dune.akl.run/",
       "https://loghry.org/",
     ]);
   });
