@@ -21,6 +21,7 @@ export async function run(browser) {
     "https://rfc.akl.run/",
     "https://journalscope.akl.run/",
     "https://enchilada.dev/",
+    "https://dune.akl.run/",
     "https://loghry.org/",
   ];
   const got = [...new Set(links)].sort();
